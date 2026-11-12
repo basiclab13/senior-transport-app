@@ -1,11 +1,19 @@
+import 'support/fixtures.dart';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:senior_transport_app/data/demo_data.dart';
 import 'package:senior_transport_app/models/transport.dart';
+import 'package:senior_transport_app/models/app_user.dart';
 import 'package:senior_transport_app/services/schedule_controller.dart';
 
 void main() {
   late ScheduleController c;
-  setUp(() => c = ScheduleController(initialDate: DateTime(2026, 11, 12)));
+  setUp(
+    () => c = fixtureController(
+      user: const AppUser(uid: 'fictional-admin', role: UserRole.admin),
+      initialDate: DateTime(2026, 11, 12),
+    ),
+  );
   tearDown(() => c.dispose());
 
   test('기본 코스에서 날짜별 초안을 생성하며 직원에게 미확정본을 숨긴다', () {
@@ -46,17 +54,13 @@ void main() {
     c.confirm();
     final previous = c.confirmed;
     c.markAbsent('p2');
-    expect(c.staffRoutes.first.passengerIds, contains('p2'));
+    expect(c.confirmed!.routes.first.passengerIds, contains('p2'));
     expect(c.confirmed, same(previous));
     c.confirm();
     expect(c.confirmed!.version, 2);
-    expect(c.staffRoutes.first.passengerIds, ['p1', 'p3']);
+    expect(c.confirmed!.routes.first.passengerIds, ['p1', 'p3']);
     expect(previous!.routes.first.passengerIds, ['p1', 'p2', 'p3']);
     expect(c.hasPendingChanges, isFalse);
-    c.selectStaff('s2');
-    expect(c.staffRoutes.single.baseRouteId, 'morning-b');
-    c.selectStaff('s3');
-    expect(c.staffRoutes, isEmpty);
   });
 
   test('정원 초과 시 확정을 막고 기존 확정본을 보존한다', () {
@@ -107,7 +111,14 @@ void main() {
   });
 
   test('직원 역할에서는 모든 일정 변경 및 확정을 차단한다', () {
-    c.selectRole(DemoRole.staff);
+    c.dispose();
+    c = fixtureController(
+      user: const AppUser(
+        uid: 'fictional-staff',
+        role: UserRole.staff,
+        staffId: 's1',
+      ),
+    );
     expect(() => c.markAbsent('p1'), throwsStateError);
     expect(() => c.restorePassenger('p1'), throwsStateError);
     expect(() => c.movePassenger('p1', 'morning-b'), throwsStateError);
@@ -125,6 +136,91 @@ void main() {
     expect(
       () => DemoData.baseRoutes.first.passengerIds.clear(),
       throwsUnsupportedError,
+    );
+  });
+
+  test('직원 간 재배정은 원본 배정과 예상 시각을 제거하고 전체 변경을 함께 확정한다', () {
+    c.setVisitMinute('morning-b', 'p4', 490);
+    c.markAbsent('p2');
+    c.movePassenger('p4', 'morning-a');
+    expect(c.routesForStaff('s1').single.passengerIds, ['p1', 'p3', 'p4']);
+    expect(c.routesForStaff('s2').single.passengerIds, ['p5']);
+    expect(
+      c.draft.routes.every((r) => !r.estimatedVisitMinutes.containsKey('p4')),
+      isTrue,
+    );
+    expect(c.validationErrors, isEmpty);
+    c.confirm();
+    expect(c.confirmed!.routes.first.passengerIds, ['p1', 'p3', 'p4']);
+    expect(c.confirmed!.routes.last.passengerIds, ['p5']);
+    expect(DemoData.baseRoutes.first.passengerIds, ['p1', 'p2', 'p3']);
+  });
+
+  test('제외와 결석을 구분하며 원하는 직원에게 중복 없이 복귀시킨다', () {
+    c.excludePassenger('p2');
+    expect(c.draft.excludedIds, {'p2'});
+    expect(c.draft.absentIds, isEmpty);
+    expect(c.validationErrors, isEmpty);
+    c.addPassenger('p2', 'morning-b');
+    expect(c.draft.excludedIds, isEmpty);
+    expect(c.draft.routes.last.passengerIds, ['p4', 'p5', 'p2']);
+    c.addPassenger('p2', 'morning-b');
+    expect(
+      c.draft.routes.last.passengerIds.where((id) => id == 'p2').length,
+      1,
+    );
+    expect(c.validationErrors, isEmpty);
+  });
+
+  test('예상 시각은 날짜·시간대별로 보존되고 순서 역전·범위 이탈을 차단한다', () {
+    c.setOperatingWindow('morning-a', 480, 570);
+    c.setVisitMinute('morning-a', 'p1', 490);
+    c.setVisitMinute('morning-a', 'p2', 500);
+    c.setVisitMinute('morning-a', 'p3', 510);
+    c.confirm();
+    final previous = c.confirmed;
+    c.reorder('morning-a', 0, 1);
+    expect(c.validationErrors.join(), contains('예상 방문 시각이 충돌'));
+    expect(c.confirm, throwsStateError);
+    expect(c.confirmed, same(previous));
+    c.reorder('morning-a', 0, 1);
+    c.setVisitMinute('morning-a', 'p3', 600);
+    expect(c.validationErrors.join(), contains('운행 시간 범위'));
+    c.setVisitMinute('morning-a', 'p3', null);
+    expect(c.validationErrors, isEmpty);
+    c.selectPeriod(TransportPeriod.afternoon);
+    expect(c.draft.routes.first.estimatedVisitMinutes, isEmpty);
+    c.selectPeriod(TransportPeriod.morning);
+    expect(c.draft.routes.first.estimatedVisitMinutes['p1'], 490);
+    expect(
+      () => c.draft.routes.first.estimatedVisitMinutes.clear(),
+      throwsUnsupportedError,
+    );
+    c.selectDate(DateTime(2026, 11, 13));
+    expect(c.draft.routes.first.startMinute, isNull);
+  });
+
+  test('직원은 예상 시각 수정·추가·제외도 수행할 수 없다', () {
+    final staffController = fixtureController(
+      user: const AppUser(
+        uid: 'fictional-staff',
+        role: UserRole.staff,
+        staffId: 's1',
+      ),
+    );
+    addTearDown(staffController.dispose);
+    expect(
+      () => staffController.setVisitMinute('morning-a', 'p1', 490),
+      throwsStateError,
+    );
+    expect(
+      () => staffController.setOperatingWindow('morning-a', 480, 570),
+      throwsStateError,
+    );
+    expect(() => staffController.excludePassenger('p1'), throwsStateError);
+    expect(
+      () => staffController.addPassenger('p4', 'morning-a'),
+      throwsStateError,
     );
   });
 }

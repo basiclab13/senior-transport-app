@@ -46,3 +46,8 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+node_modules/
+.local-tools/
+.emulator-data/
+*-debug.log
+*-debug.*.log

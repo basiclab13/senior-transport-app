@@ -1,19 +1,40 @@
 import 'package:flutter/material.dart';
 
-import '../data/demo_data.dart';
+import '../models/app_user.dart';
 import '../models/transport.dart';
 import '../services/schedule_controller.dart';
+import '../services/schedule_repository.dart';
+import 'admin_schedule_view.dart';
+import 'staff_schedule_view.dart';
 
 class ScheduleScreen extends StatefulWidget {
-  const ScheduleScreen({super.key, this.controller});
+  const ScheduleScreen({
+    super.key,
+    required this.user,
+    required this.onSignOut,
+    this.signingOut = false,
+    this.authError,
+    this.controller,
+    this.repository,
+  });
+  final AppUser user;
+  final Future<void> Function() onSignOut;
+  final bool signingOut;
+  final String? authError;
   final ScheduleController? controller;
+  final ScheduleRepository? repository;
 
   @override
   State<ScheduleScreen> createState() => _ScheduleScreenState();
 }
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
-  late final ScheduleController c = widget.controller ?? ScheduleController();
+  late final ScheduleController c =
+      widget.controller ??
+      ScheduleController.remote(
+        user: widget.user,
+        repository: widget.repository!,
+      );
 
   @override
   void dispose() {
@@ -24,6 +45,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Future<void> _pickDate() async {
     final date = await showDatePicker(
       context: context,
+      useRootNavigator: false,
       initialDate: c.selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
@@ -36,39 +58,37 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     final snapshot = c.draft;
     final approved = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (context) => AlertDialog(
-        title: Text('${c.period.label} 일정 확정'),
+        title: Text('${c.period.label} 전체 직원 일정 검토'),
         content: SizedBox(
-          width: 440,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('${dateKey(c.selectedDate)} · ${c.period.time}'),
-                const SizedBox(height: 12),
-                for (final route in snapshot.routes) ...[
-                  Text(
-                    c.baseRoute(route.baseRouteId).name,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+          width: 560,
+          height: 380,
+          child: ListView(
+            children: [
+              Text('${dateKey(snapshot.date)} · ${snapshot.routes.length}개 코스'),
+              const SizedBox(height: 8),
+              Text(
+                c.isRemote
+                    ? '전체 직원 변경사항을 서버에서 다시 검증하고 Firestore에 함께 저장합니다.'
+                    : '로컬 테스트 일정입니다.',
+              ),
+              for (final route in snapshot.routes)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    '${c.staff(route.staffId).name} · ${c.baseRoute(route.baseRouteId).name}',
                   ),
-                  Text(
-                    '${c.staff(route.staffId).name} · ${c.vehicle(route.vehicleId).name}',
+                  subtitle: Text(
+                    '${c.vehicle(route.vehicleId).name} · 예상 ${minuteLabel(route.startMinute)}–${minuteLabel(route.endMinute)}\n'
+                    '${route.passengerIds.map((id) => '${c.passenger(id).name} (${minuteLabel(route.estimatedVisitMinutes[id])})').join(' → ')}',
                   ),
-                  Text(
-                    route.passengerIds.isEmpty
-                        ? '송영 대상 없음'
-                        : route.passengerIds
-                              .map((id) => c.passenger(id).name)
-                              .join(' → '),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                Text('결석 ${snapshot.absentIds.length}명'),
-                const SizedBox(height: 12),
-                const Text('확정하면 이 시간대의 전체 일정이 직원 화면에 반영됩니다.'),
-              ],
-            ),
+                ),
+              Text(
+                '결석 ${snapshot.absentIds.length}명 · 제외 ${snapshot.excludedIds.length}명',
+              ),
+              for (final warning in c.planningWarnings) Text(warning),
+            ],
           ),
         ),
         actions: [
@@ -79,225 +99,270 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           FilledButton(
             key: const Key('approve-confirm'),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('확정하여 공유'),
+            child: Text(c.isRemote ? 'Firestore에 확정 저장' : '가상 일정 확정'),
           ),
         ],
       ),
     );
-    if (approved != true || !mounted) return;
-    // A dialog reviews one immutable snapshot; reject an unexpected state change.
-    if (!identical(snapshot, c.draft)) return;
-    c.confirm();
+    if (approved != true || !mounted || !identical(snapshot, c.draft)) return;
+    final saved = await c.publish();
+    if (!mounted || !saved) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('일정을 확정했습니다. 직원 화면에서 확인할 수 있습니다.')),
+      SnackBar(
+        content: Text(
+          c.isRemote ? '전체 직원 일정을 Firestore에 저장했습니다.' : '로컬 테스트 일정을 확정했습니다.',
+        ),
+      ),
     );
+  }
+
+  void _showValidation() {
+    final errors = c.validationErrors;
+    final warnings = c.planningWarnings;
+    showDialog<void>(
+      context: context,
+      useRootNavigator: false,
+      builder: (context) => AlertDialog(
+        title: const Text('전체 직원 일정 검증'),
+        content: SizedBox(
+          width: 540,
+          height: 320,
+          child: ListView(
+            children: [
+              Text(
+                errors.isEmpty
+                    ? '일정 충돌·중복 배정·차량 정원 검증 통과'
+                    : '아래 오류를 해결한 뒤 확정해 주세요.',
+              ),
+              for (final error in errors)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    error,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
+              if (warnings.isNotEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(top: 16),
+                  child: Text('예상 시각 미입력 안내 (확정 가능)'),
+                ),
+              for (final warning in warnings) Text(warning),
+              const SizedBox(height: 16),
+              const Text(
+                '시연 기준: 같은 시간대 코스는 동시에 운행하는 것으로 검증합니다. 정원은 이용자 수 기준입니다.',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('닫기'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _reload() async {
+    final approved = await showDialog<bool>(
+      context: context,
+      useRootNavigator: false,
+      builder: (context) => AlertDialog(
+        title: const Text('최신 일정 다시 불러오기'),
+        content: const Text('현재 선택한 날짜·시간대의 미확정 편집 내용을 폐기하고 서버 최신본을 불러옵니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('최신본 불러오기'),
+          ),
+        ],
+      ),
+    );
+    if (approved == true && mounted) await c.reloadDiscardingDraft();
   }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: c,
     builder: (context, _) {
-      final admin = c.role == DemoRole.admin;
-      final routes = admin ? c.draft.routes : c.staffRoutes;
+      if (c.loading || c.dataError != null) {
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('다정 송영 관리'),
+            actions: [
+              TextButton(
+                key: const Key('logout'),
+                onPressed: widget.signingOut ? null : widget.onSignOut,
+                child: const Text('로그아웃'),
+              ),
+            ],
+          ),
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: c.loading
+                  ? const CircularProgressIndicator(
+                      semanticsLabel: 'Firestore 일정 조회 중',
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(c.dataError!),
+                        TextButton(
+                          onPressed: c.retryLoad,
+                          child: const Text('다시 불러오기'),
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+        );
+      }
+      final admin = c.role == UserRole.admin;
       final errors = admin ? c.validationErrors : <String>[];
-      final confirmed = c.confirmed;
       return Scaffold(
         appBar: AppBar(
-          title: const Text(
-            '다정 송영 관리',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
+          title: const Text('다정 송영 관리'),
+          actions: [
+            TextButton.icon(
+              key: const Key('logout'),
+              onPressed: widget.signingOut ? null : widget.onSignOut,
+              icon: const Icon(Icons.logout),
+              label: Text(widget.signingOut ? '로그아웃 중' : '로그아웃'),
+            ),
+          ],
         ),
         body: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1080),
-            child: ListView(
-              padding: const EdgeInsets.all(16),
+            constraints: const BoxConstraints(maxWidth: 1440),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  '가상 주간보호센터 · MVP 시제품',
-                  style: TextStyle(
-                    color: Color(0xFF147D73),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  admin
-                      ? '오늘의 이동을 함께 준비해요'
-                      : '${c.staff(c.staffId).name}님의 송영 일정',
-                  style: Theme.of(context).textTheme.headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                const Text('가상 데이터만 사용합니다. 새로고침하면 수정·확정 내역이 초기화됩니다.'),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    SegmentedButton<DemoRole>(
-                      segments: const [
-                        ButtonSegment(
-                          value: DemoRole.admin,
-                          label: Text('관리자'),
-                          icon: Icon(Icons.edit_calendar),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        admin ? '관리자 화면' : '직원 화면',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      Text(
+                        c.isRemote
+                            ? '가상 데이터 · Firestore 확정 일정 공유'
+                            : '가상 데이터 · 로컬 테스트',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      if (widget.authError != null)
+                        Text(
+                          widget.authError!,
+                          style: const TextStyle(color: Colors.red),
                         ),
-                        ButtonSegment(
-                          value: DemoRole.staff,
-                          label: Text('직원'),
-                          icon: Icon(Icons.person_outline),
-                        ),
-                      ],
-                      selected: {c.role},
-                      onSelectionChanged: (roles) => c.selectRole(roles.first),
-                    ),
-                    const Text('임시 역할 전환'),
-                    if (!admin)
-                      SizedBox(
-                        width: 220,
-                        child: DropdownButtonFormField<String>(
-                          key: ValueKey('staff-${c.staffId}'),
-                          initialValue: c.staffId,
-                          decoration: const InputDecoration(
-                            labelText: '시연할 직원',
+                      if (c.saveError != null || c.conflict)
+                        Text(
+                          c.saveError ?? '다른 관리자가 변경했습니다. 최신본을 확인해 주세요.',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
                           ),
-                          items: [
-                            for (final staff in DemoData.staff)
-                              DropdownMenuItem(
-                                value: staff.id,
-                                child: Text(staff.name),
-                              ),
-                          ],
-                          onChanged: (id) {
-                            if (id != null) c.selectStaff(id);
-                          },
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                  ],
+                      if (c.conflict || c.saveError != null)
+                        TextButton(
+                          key: const Key('reload-schedule'),
+                          onPressed: c.saving ? null : _reload,
+                          child: const Text('편집 내용 폐기 후 최신본 불러오기'),
+                        ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 20),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 12,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    IconButton(
-                      tooltip: '이전 날짜',
-                      onPressed: () => c.selectDate(
-                        DateTime(
-                          c.selectedDate.year,
-                          c.selectedDate.month,
-                          c.selectedDate.day - 1,
-                        ),
-                      ),
-                      icon: const Icon(Icons.chevron_left),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: _pickDate,
-                      icon: const Icon(Icons.calendar_today_outlined, size: 18),
-                      label: Text(dateKey(c.selectedDate)),
-                    ),
-                    IconButton(
-                      tooltip: '다음 날짜',
-                      onPressed: () => c.selectDate(
-                        DateTime(
-                          c.selectedDate.year,
-                          c.selectedDate.month,
-                          c.selectedDate.day + 1,
-                        ),
-                      ),
-                      icon: const Icon(Icons.chevron_right),
-                    ),
-                    SegmentedButton<TransportPeriod>(
-                      segments: const [
-                        ButtonSegment(
-                          value: TransportPeriod.morning,
-                          label: Text('오전'),
-                        ),
-                        ButtonSegment(
-                          value: TransportPeriod.afternoon,
-                          label: Text('오후'),
-                        ),
-                      ],
-                      selected: {c.period},
-                      onSelectionChanged: (periods) =>
-                          c.selectPeriod(periods.first),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                _notice(
-                  admin ? Icons.edit_note : Icons.verified_outlined,
-                  admin
-                      ? (confirmed == null
-                            ? '작성 중 · 아직 확정하지 않은 일정입니다.'
-                            : c.hasPendingChanges
-                            ? '수정 중 · 직원에게는 확정본 v${confirmed.version}이 표시됩니다.'
-                            : '확정 완료 · v${confirmed.version}')
-                      : (confirmed == null
-                            ? '아직 확정된 일정이 없습니다.'
-                            : '최신 확정 일정 · v${confirmed.version}'),
-                  '${c.period.label} ${c.period.time} · ${c.period == TransportPeriod.morning ? '자택 → 센터' : '센터 → 자택'}',
-                ),
-                if (admin) ...[
-                  const SizedBox(height: 12),
-                  const Text('결석과 편집은 선택한 날짜·시간대에만 적용됩니다. 기본 코스는 유지됩니다.'),
-                  if (c.draft.absentIds.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    const Text('결석 이용자 · 복귀 시 기본 코스의 마지막 순서에 추가'),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        for (final id in c.draft.absentIds)
-                          InputChip(
-                            label: Text(c.passenger(id).name),
-                            deleteIcon: const Icon(Icons.undo, size: 18),
-                            deleteButtonTooltipMessage: '결석 취소',
-                            onDeleted: () => c.restorePassenger(id),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      IconButton(
+                        tooltip: '이전 날짜',
+                        onPressed: () => c.selectDate(
+                          DateTime(
+                            c.selectedDate.year,
+                            c.selectedDate.month,
+                            c.selectedDate.day - 1,
                           ),
-                      ],
-                    ),
-                  ],
-                ],
-                const SizedBox(height: 16),
-                if (routes.isEmpty)
-                  _notice(
-                    Icons.event_available,
-                    '배정된 확정 일정이 없습니다.',
-                    '관리자가 이 날짜·시간대의 일정을 확정하면 본인에게 배정된 코스가 표시됩니다.',
+                        ),
+                        icon: const Icon(Icons.chevron_left),
+                      ),
+                      OutlinedButton.icon(
+                        key: const Key('select-date'),
+                        onPressed: _pickDate,
+                        icon: const Icon(Icons.calendar_today, size: 18),
+                        label: Text(dateKey(c.selectedDate)),
+                      ),
+                      IconButton(
+                        tooltip: '다음 날짜',
+                        onPressed: () => c.selectDate(
+                          DateTime(
+                            c.selectedDate.year,
+                            c.selectedDate.month,
+                            c.selectedDate.day + 1,
+                          ),
+                        ),
+                        icon: const Icon(Icons.chevron_right),
+                      ),
+                      TextButton(
+                        key: const Key('today'),
+                        onPressed: () => c.selectDate(DateTime.now()),
+                        child: const Text('오늘'),
+                      ),
+                      SegmentedButton<TransportPeriod>(
+                        segments: const [
+                          ButtonSegment(
+                            value: TransportPeriod.morning,
+                            label: Text('오전'),
+                          ),
+                          ButtonSegment(
+                            value: TransportPeriod.afternoon,
+                            label: Text('오후'),
+                          ),
+                        ],
+                        selected: {c.period},
+                        onSelectionChanged: (values) =>
+                            c.selectPeriod(values.first),
+                      ),
+                    ],
                   ),
-                for (final route in routes) _routeCard(route, admin),
-                if (admin) ...[
-                  const SizedBox(height: 8),
-                  _notice(
-                    errors.isEmpty
-                        ? Icons.check_circle_outline
-                        : Icons.error_outline,
-                    errors.isEmpty ? '일정 검증 통과' : '확정 전 수정이 필요합니다',
-                    errors.isEmpty
-                        ? '직원 근무 · 차량 정원 · 중복 배정 · 이용자 누락을 확인했습니다.'
-                        : errors.join('\n'),
-                    error: errors.isNotEmpty,
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(
-                    key: const Key('confirm-schedule'),
-                    onPressed:
-                        errors.isEmpty &&
-                            (confirmed == null || c.hasPendingChanges)
-                        ? _confirm
-                        : null,
-                    icon: const Icon(Icons.check),
-                    label: Text('${c.period.label} 전체 일정 검토 및 확정'),
-                  ),
-                ],
-                const SizedBox(height: 24),
-                const Text(
-                  '시연 기준: 코스당 직원 1명 · 시간대 내 코스 동시 운행 · 정원은 이용자 수 기준',
-                  style: TextStyle(fontSize: 12, color: Colors.black54),
                 ),
+                const Divider(height: 1),
+                Expanded(
+                  child: admin
+                      ? AbsorbPointer(
+                          absorbing: c.saving,
+                          child: AdminScheduleView(controller: c),
+                        )
+                      : StaffScheduleView(controller: c),
+                ),
+                if (admin)
+                  SafeArea(
+                    top: false,
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      color: Theme.of(context).colorScheme.surfaceContainer,
+                      child: _reviewBar(errors),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -306,219 +371,77 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     },
   );
 
-  Widget _notice(
-    IconData icon,
-    String title,
-    String detail, {
-    bool error = false,
-  }) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: error ? const Color(0xFFFFEDEC) : const Color(0xFFE6F2EF),
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(
-          icon,
-          color: error ? Colors.red.shade800 : const Color(0xFF147D73),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              Text(detail),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-
-  Widget _routeCard(RouteAssignment route, bool admin) {
-    final base = c.baseRoute(route.baseRouteId);
-    final vehicle = c.vehicle(route.vehicleId);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      color: Colors.white,
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: Color(0xFFDDE5E5)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _reviewBar(List<String> errors) => LayoutBuilder(
+    builder: (context, size) {
+      final status = Text(
+        c.confirmed == null
+            ? '작성 중 · 아직 확정하지 않은 일정입니다.'
+            : c.hasPendingChanges
+            ? '수정 중 · 확정본 v${c.confirmed!.version} 유지'
+            : '확정 완료 · v${c.confirmed!.version}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+      final validationLabel = errors.isEmpty
+          ? '전체 검증 통과'
+          : '충돌·배정 오류 ${errors.length}건';
+      final icon = Icon(
+        errors.isEmpty ? Icons.check_circle_outline : Icons.warning_amber,
+        color: errors.isEmpty ? Colors.teal : Colors.red,
+      );
+      final confirm = FilledButton.icon(
+        key: const Key('confirm-schedule'),
+        onPressed:
+            !c.saving &&
+                !c.conflict &&
+                errors.isEmpty &&
+                (c.confirmed == null || c.hasPendingChanges)
+            ? _confirm
+            : null,
+        icon: const Icon(Icons.check),
+        label: Text(c.saving ? 'Firestore 저장 중…' : '전체 직원 변경 검토·확정'),
+      );
+      if (size.maxWidth < 600) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              base.name,
-              style: Theme.of(context).textTheme.titleLarge
-                  ?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${c.staff(route.staffId).name} · ${vehicle.name} · 이용자 ${route.passengerIds.length}/${vehicle.passengerCapacity}명',
-            ),
-            if (admin) ...[
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  SizedBox(
-                    width: 240,
-                    child: DropdownButtonFormField<String>(
-                      key: ValueKey(
-                        '${dateKey(c.selectedDate)}-${route.baseRouteId}-${route.staffId}',
-                      ),
-                      initialValue: route.staffId,
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: '담당 직원'),
-                      items: [
-                        for (final staff in DemoData.staff)
-                          DropdownMenuItem(
-                            value: staff.id,
-                            child: Text(
-                              '${staff.name}${staff.isAvailable(c.selectedDate, c.period) ? '' : ' (근무 불가)'}',
-                            ),
-                          ),
-                      ],
-                      onChanged: (id) {
-                        if (id != null) {
-                          c.assign(route.baseRouteId, staffId: id);
-                        }
-                      },
-                    ),
-                  ),
-                  SizedBox(
-                    width: 240,
-                    child: DropdownButtonFormField<String>(
-                      key: ValueKey(
-                        '${dateKey(c.selectedDate)}-${route.baseRouteId}-${route.vehicleId}',
-                      ),
-                      initialValue: route.vehicleId,
-                      decoration: const InputDecoration(labelText: '배정 차량'),
-                      items: [
-                        for (final v in DemoData.vehicles)
-                          DropdownMenuItem(
-                            value: v.id,
-                            child: Text('${v.name} (${v.passengerCapacity}명)'),
-                          ),
-                      ],
-                      onChanged: (id) {
-                        if (id != null) {
-                          c.assign(route.baseRouteId, vehicleId: id);
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '기본 방문 순서: ${base.passengerIds.map((id) => c.passenger(id).name.replaceFirst('가상 어르신 ', '')).join(' → ')}',
-                style: const TextStyle(color: Colors.black54),
-              ),
-            ],
-            const Divider(height: 28),
-            if (route.passengerIds.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text('송영 대상 이용자가 없습니다.'),
-              ),
-            for (var i = 0; i < route.passengerIds.length; i++)
-              _passengerRow(route, i, admin),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _passengerRow(RouteAssignment route, int index, bool admin) {
-    final id = route.passengerIds[index];
-    final passenger = c.passenger(id);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(radius: 17, child: Text('${index + 1}')),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      passenger.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    Text(passenger.address),
-                    Text(
-                      passenger.note,
-                      style: const TextStyle(color: Colors.black54),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          if (admin)
-            Wrap(
-              spacing: 4,
-              crossAxisAlignment: WrapCrossAlignment.center,
+            status,
+            Row(
               children: [
                 IconButton(
-                  key: ValueKey('up-$id'),
-                  tooltip: '${passenger.name} 위로',
-                  onPressed: index > 0
-                      ? () => c.reorder(route.baseRouteId, index, -1)
-                      : null,
-                  icon: const Icon(Icons.arrow_upward, size: 20),
-                ),
-                IconButton(
-                  key: ValueKey('down-$id'),
-                  tooltip: '${passenger.name} 아래로',
-                  onPressed: index < route.passengerIds.length - 1
-                      ? () => c.reorder(route.baseRouteId, index, 1)
-                      : null,
-                  icon: const Icon(Icons.arrow_downward, size: 20),
-                ),
-                PopupMenuButton<String>(
-                  key: ValueKey('move-$id'),
-                  tooltip: '${passenger.name} 코스 이동',
-                  onSelected: (routeId) => c.movePassenger(id, routeId),
-                  itemBuilder: (_) => [
-                    for (final r in c.draft.routes.where(
-                      (r) => r.baseRouteId != route.baseRouteId,
-                    ))
-                      PopupMenuItem(
-                        value: r.baseRouteId,
-                        child: Text('${c.baseRoute(r.baseRouteId).name}로 이동'),
-                      ),
-                  ],
-                  child: const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Text('코스 이동 ▾'),
+                  key: const Key('validation-results'),
+                  tooltip: validationLabel,
+                  onPressed: _showValidation,
+                  icon: Badge(
+                    isLabelVisible: errors.isNotEmpty,
+                    label: Text('${errors.length}'),
+                    child: icon,
                   ),
                 ),
-                TextButton.icon(
-                  key: ValueKey('absent-$id'),
-                  onPressed: () => c.markAbsent(id),
-                  icon: const Icon(Icons.person_off_outlined, size: 18),
-                  label: const Text('결석'),
-                ),
+                const SizedBox(width: 8),
+                Expanded(child: confirm),
               ],
             ),
+          ],
+        );
+      }
+      return Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        spacing: 12,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          status,
+          TextButton.icon(
+            key: const Key('validation-results'),
+            onPressed: _showValidation,
+            icon: icon,
+            label: Text(validationLabel),
+          ),
+          confirm,
         ],
-      ),
-    );
-  }
+      );
+    },
+  );
 }

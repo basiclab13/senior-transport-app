@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "387017587964",
+    "project_id": "senior-transport-app",
+    "storage_bucket": "senior-transport-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:387017587964:android:19446d043eb0ae1eb8ab79",
+        "android_client_info": {
+          "package_name": "com.example.senior_transport_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC4dy1x9Or5q6hLZ8YraG3edfE7xXvD3_k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

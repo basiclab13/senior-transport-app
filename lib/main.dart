@@ -1,11 +1,77 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
-import 'screens/schedule_screen.dart';
+import 'firebase_options.dart';
+import 'screens/auth_gate.dart';
+import 'services/auth_service.dart';
+import 'services/schedule_repository.dart';
 
-void main() => runApp(const MyApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    const emulator = bool.fromEnvironment('USE_FIREBASE_EMULATORS');
+    const emulatorHost = String.fromEnvironment(
+      'EMULATOR_HOST',
+      defaultValue: '127.0.0.1',
+    );
+    await Firebase.initializeApp(
+      options: emulator
+          ? const FirebaseOptions(
+              apiKey: 'demo-emulator-key',
+              appId: '1:123456789:web:demo',
+              messagingSenderId: '123456789',
+              projectId: 'demo-senior-transport',
+              authDomain: 'demo-senior-transport.firebaseapp.com',
+            )
+          : DefaultFirebaseOptions.currentPlatform,
+    );
+    final functions = FirebaseFunctions.instanceFor(region: 'asia-northeast3');
+    if (emulator) {
+      await FirebaseAuth.instance.useAuthEmulator(emulatorHost, 9099);
+      FirebaseFirestore.instance.useFirestoreEmulator(emulatorHost, 8080);
+      functions.useFunctionsEmulator(emulatorHost, 5001);
+    }
+    if (kIsWeb) await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+    runApp(
+      MyApp(
+        schedules: FirebaseScheduleRepository(
+          FirebaseFirestore.instance,
+          functions,
+        ),
+        auth: AuthService(
+          FirebaseAuthRepository(
+            FirebaseAuth.instance,
+            FirebaseFirestore.instance,
+          ),
+        ),
+      ),
+    );
+  } catch (_) {
+    runApp(
+      const MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                'Firebase를 초기화할 수 없습니다. 설정과 네트워크 연결을 확인한 뒤 앱을 다시 실행해 주세요.',
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({super.key, required this.auth, required this.schedules});
+  final AuthService auth;
+  final ScheduleRepository schedules;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -19,6 +85,6 @@ class MyApp extends StatelessWidget {
         border: OutlineInputBorder(),
       ),
     ),
-    home: const ScheduleScreen(),
+    home: AuthGate(auth: auth, schedules: schedules),
   );
 }

@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function active() {
+      return request.auth != null && profile().active == true &&
+        profile().role in ['admin', 'staff'];
+    }
+    function admin() { return active() && profile().role == 'admin'; }
+    function ownStaff(id) {
+      return active() && profile().role == 'staff' && profile().staffId == id;
+    }
+    function validStaff(version, id) {
+      return get(/databases/$(database)/documents/catalogs/$(version)).data.ready == true &&
+        get(/databases/$(database)/documents/catalogs/$(version)/staff/$(id)).data.active == true;
+    }
+    match /users/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow list, write: if false;
+    }
+    match /settings/schedules {
+      allow get: if active();
+      allow list, write: if false;
+    }
+    match /catalogs/{version} {
+      allow get: if active();
+      allow list, write: if false;
+      match /staff/{id} {
+        allow get: if admin() || ownStaff(id);
+        allow list: if admin();
+        allow write: if false;
+      }
+      match /{collection}/{id} {
+        allow read: if admin() && collection in ['vehicles', 'passengers', 'baseRoutes'];
+        allow write: if false;
+      }
+    }
+    match /schedules/{scheduleId} {
+      allow read: if admin();
+      // All clients, including admins, publish through confirmSchedule only.
+      allow write: if false;
+      match /commits/{requestId} {
+        allow get: if admin();
+        allow list, write: if false;
+      }
+    }
+    match /staffSchedules/{staffId}/days/{scheduleId} {
+      allow get: if admin() || (ownStaff(staffId) &&
+        validStaff(get(/databases/$(database)/documents/settings/schedules).data.catalogVersion, staffId) &&
+        (!exists(/databases/$(database)/documents/staffSchedules/$(staffId)/days/$(scheduleId)) ||
+          (resource.data.staffId == staffId && resource.data.status == 'confirmed')));
+      allow list: if admin();
+      allow write: if false;
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}
