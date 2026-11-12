@@ -1,10 +1,12 @@
 # 실제 Firebase 초기 등록용 기준 가상 데이터
 
-이 문서는 tools/fictional_catalog.cjs의 `fictionalCatalog(false)`와 Flutter의 ScheduleCatalog 파서를 기준으로 한다. 실제 Firestore에 접속하거나 데이터를 수정하지 않았다. 기본 데이터와 설정의 최종 목표 상태는 [deploy-test-v1.baseline.json](fixtures/deploy-test-v1.baseline.json)에 정리했다. 이 JSON은 운영자용 `tools/register-initial-catalog.cjs`의 입력 manifest이며 Firebase CLI import 형식은 아니다.
+현재 CLI 등록 대상은 deploy-test-v2다. 이전 deploy-test-v1 manifest와 실제 v1 문서는 보존한다. 두 manifest의 자식 15개 내용/ID는 같으며 catalogVersion과 settings의 목표 버전만 다르다. v1 포인터가 있다면 [예상 이전 버전 명시 절차](initial-catalog-cli.md)를 따른다.
+
+이 문서는 tools/fictional_catalog.cjs의 `fictionalCatalog(false)`와 Flutter의 ScheduleCatalog 파서를 기준으로 한다. 실제 Firestore에 접속하거나 데이터를 수정하지 않았다. 기본 데이터와 설정의 최종 목표 상태는 [deploy-test-v2.baseline.json](fixtures/deploy-test-v2.baseline.json)에 정리했다. 이 JSON은 운영자용 `tools/register-initial-catalog.cjs`의 입력 manifest이며 Firebase CLI import 형식은 아니다.
 
 ## staff/s1에 입력할 값
 
-경로: `catalogs/deploy-test-v1/staff/s1`
+경로: `catalogs/deploy-test-v2/staff/s1`
 
 | 필드 | Firestore 타입 | 값 | 필수 여부 |
 |---|---|---|---|
@@ -32,7 +34,7 @@ id는 필드로 입력할 필요가 없다. 문서 ID s1에서 읽는다. 직원
 
 ## 차량
 
-경로: `catalogs/deploy-test-v1/vehicles/<문서 ID>`
+경로: `catalogs/deploy-test-v2/vehicles/<문서 ID>`
 
 필수 필드는 name(string), passengerCapacity(number 정수)다.
 
@@ -51,7 +53,7 @@ id는 필드로 입력할 필요가 없다. 문서 ID s1에서 읽는다. 직원
 
 ## 이용자
 
-경로: `catalogs/deploy-test-v1/passengers/<문서 ID>`
+경로: `catalogs/deploy-test-v2/passengers/<문서 ID>`
 
 name, address, note는 모두 string이며 현재 파서에서 모두 필요하다. 주의사항이 없더라도 필드를 생략하지 않고 빈 문자열을 사용할 수 있다. 아래 값은 프로젝트에 정의된 가상 정보다.
 
@@ -73,7 +75,7 @@ name, address, note는 모두 string이며 현재 파서에서 모두 필요하�
 
 ## 기본 코스
 
-경로: `catalogs/deploy-test-v1/baseRoutes/<문서 ID>`
+경로: `catalogs/deploy-test-v2/baseRoutes/<문서 ID>`
 
 필수 필드는 name/period/staffId/vehicleId(string), passengerIds(array of string)이다. period는 정확히 morning 또는 afternoon이다. passengerIds 배열 순서가 기본 방문 순서다.
 
@@ -108,7 +110,7 @@ name, address, note는 모두 string이며 현재 파서에서 모두 필요하�
 
 실제 초기 등록 대상은 왼쪽 기준이다. catalog 부모와 settings 문서까지 포함하면 17개 문서다. Auth 계정, users, 날짜별 확정 일정은 이 개수에 포함하지 않는다.
 
-부모 `catalogs/deploy-test-v1`의 최종 필드:
+부모 `catalogs/deploy-test-v2`의 최종 필드:
 
 ```json
 {"ready": true, "fictional": true, "schemaVersion": 1}
@@ -117,7 +119,7 @@ name, address, note는 모두 string이며 현재 파서에서 모두 필요하�
 설정은 **settings/schedules 문서**의 필드다.
 
 ```json
-{"catalogVersion": "deploy-test-v1"}
+{"catalogVersion": "deploy-test-v2"}
 ```
 
 개별 Console 등록 중에는 ready=false로 두고, 모든 자식 데이터 검증 후 ready=true 및 settings 전환을 수행한다. 실제 활성 사용자의 staffId가 s1/s2/s3 외에 이미 존재한다면 이 기준 catalog로 무조건 전환하지 않는다. 해당 연결을 먼저 확인해야 한다.
@@ -134,9 +136,9 @@ name, address, note는 모두 string이며 현재 파서에서 모두 필요하�
 2. 프로젝트 ID senior-transport-app, 기본 DB, catalog 버전 및 대상 경로 목록을 명시한다. 오타·다른 프로젝트·예상하지 못한 Emulator 환경이면 거부한다.
 3. 오프라인 계획 확인 → 실제 DB 읽기 전용 사전 점검 → 사용자 명시적 적용 단계로 나눈다. 읽기 전용 점검도 실제 Firestore 읽기 비용은 발생할 수 있으므로 사용자 선택으로 수행한다.
 4. 기존 부모/자식 문서와 settings를 먼저 읽는다. 정확히 같은 자식은 보존하고 누락 자식만 생성한다. 값이 다른 문서, 예상 외 자식, 잘못된 부모 필드, 미완료 부모, 다른 버전 포인터는 중단 사유다. 자동 덮어쓰기·삭제·부모 보정은 하지 않는다.
-5. 모든 읽기를 쓰기 전에 수행하는 트랜잭션으로 누락 자식을 create한다. 저장된 자식 15개를 재검증한 뒤 별도 트랜잭션에서 전체 데이터·계정을 다시 검증하고 부모 ready=true와 settings 포인터를 함께 create한다. 실패 시 비활성 자식을 자동 삭제하지 않는다. 기존 부모·포인터는 수정하지 않는다.
+5. 모든 읽기를 쓰기 전에 수행하는 트랜잭션으로 누락 자식을 create한다. 저장된 자식 15개를 재검증한 뒤 별도 트랜잭션에서 전체 데이터·계정을 다시 검증하고 부모 ready=true 생성과 settings 포인터 생성/명시적 v1→v2 전환을 함께 수행한다. 실패 시 비활성 자식을 자동 삭제하지 않는다. 기존 catalog 문서는 수정하지 않는다.
 6. settings 전환 전에 기존 활성 사용자들의 staffId가 새 catalog에 모두 존재하는지 확인한다. settings의 현재 값이 사전 검토 이후 바뀌었으면 적용을 중단한다.
-7. users, Authentication 계정, schedules, staffSchedules, commits에는 쓰지 않는다. 기존 포인터가 다른 버전이면 전환하지 않고 중단한다.
+7. users, Authentication 계정, schedules, staffSchedules, commits에는 쓰지 않는다. settings의 v1→v2 전환만 예상 이전 버전 옵션으로 명시할 수 있으며, 사전 점검 이후 변경되면 중단한다. 다른 버전 전환은 거부한다.
 8. 결과는 문서 경로·개수·성공 여부만 출력한다. 비밀번호·토큰·키를 출력하지 않는다.
 
 실제 프로젝트에서 도구를 실행하지 않았다. 로컬 오프라인 계획과 Emulator에서만 검증한다. 부모를 이미 ready=false 또는 잘못된 배열 필드와 함께 만들었다면 CLI는 자동 보정하지 않고 안내만 출력한다.

@@ -4,7 +4,7 @@ const { isDeepStrictEqual } = require('node:util');
 const { createHash } = require('node:crypto');
 
 const EXPECTED_PROJECT = 'senior-transport-app';
-const EXPECTED_VERSION = 'deploy-test-v1';
+const EXPECTED_VERSION = 'deploy-test-v2';
 const EXPECTED_IDS = {
   staff: ['s1', 's2', 's3'], vehicles: ['v1', 'v2', 'v3'],
   passengers: ['p1', 'p2', 'p3', 'p4', 'p5'],
@@ -99,7 +99,7 @@ async function readState(db, plan, tx) {
     children, activeAccounts: accounts.docs.map((doc) => doc.data()) };
 }
 
-function assess(plan, state) {
+function assess(plan, state, { expectedCatalogVersion } = {}) {
   const issues = [];
   const missing = [];
   let identical = 0;
@@ -122,18 +122,21 @@ function assess(plan, state) {
       guidance: '기존 부모가 있지만 자식 문서가 미완성입니다. 이 상태에 자동으로 이어 쓰거나 활성화하지 않습니다.' });
   }
   if (state.settings !== null) {
-    if (state.settings.catalogVersion !== plan.catalogVersion) issues.push({ code: 'SETTINGS_CONFLICT', path: plan.settingsPath,
-      guidance: '기존 settings 포인터를 변경하지 않습니다. catalog 전환은 별도 검토 작업입니다.' });
-    else if (state.parent === null) issues.push({ code: 'POINTER_WITHOUT_PARENT', path: plan.settingsPath,
+    if (state.settings.catalogVersion !== plan.catalogVersion &&
+        !(expectedCatalogVersion === 'deploy-test-v1' && state.settings.catalogVersion === expectedCatalogVersion)) issues.push({ code: 'SETTINGS_CONFLICT', path: plan.settingsPath,
+      guidance: '기존 포인터와 명시한 이전 버전이 일치하지 않습니다. v1에서 전환하려면 dry-run부터 --expected-catalog-version deploy-test-v1을 명시하세요.' });
+    else if (state.settings.catalogVersion === plan.catalogVersion && state.parent === null) issues.push({ code: 'POINTER_WITHOUT_PARENT', path: plan.settingsPath,
       guidance: '포인터가 이미 대상 catalog를 가리키지만 부모가 없습니다. 기존 활성화 상태를 별도 검토해 주세요.' });
   }
+  if (state.settings === null && expectedCatalogVersion) issues.push({ code: 'SETTINGS_CONFLICT', path: plan.settingsPath,
+    guidance: '이전 버전을 명시했지만 settings 문서가 없습니다. 현재 상태를 다시 검토하세요.' });
   const staff = new Set(plan.documents.filter((doc) => doc.path.includes('/staff/')).map((doc) => doc.path.split('/').at(-1)));
   const staffAccounts = state.activeAccounts.filter((account) => account.role === 'staff');
   const invalidAccounts = staffAccounts.filter((account) => typeof account.staffId !== 'string' || !staff.has(account.staffId));
   if (invalidAccounts.length) issues.push({ code: 'STAFF_ACCOUNT_MAPPING', count: invalidAccounts.length,
     guidance: '일부 활성 직원 계정의 staffId가 기준 직원 ID와 연결되지 않습니다. users를 자동 수정하지 않고 등록을 중단합니다.' });
   return { issues, missing, identical, checkedActiveStaffAccounts: staffAccounts.length,
-    complete: issues.length === 0 && missing.length === 0 && state.parent !== null && state.settings !== null };
+    complete: issues.length === 0 && missing.length === 0 && state.parent !== null && state.settings?.catalogVersion === plan.catalogVersion };
 }
 
 function report(plan, check, mode) {
@@ -143,12 +146,22 @@ function report(plan, check, mode) {
     plannedChildDocuments: check.missing.map((doc) => doc.path),
     checkedActiveStaffAccounts: check.checkedActiveStaffAccounts,
     issues: check.issues, alreadyRegistered: check.complete,
-    createdChildDocuments: 0, createdMetadataDocuments: 0, activated: check.complete };
+    createdChildDocuments: 0, createdMetadataDocuments: 0, updatedSettingsDocuments: 0, activated: check.complete };
 }
 
-async function registerInitialCatalog(db, plan, { apply = false } = {}) {
-  const check = assess(plan, await readState(db, plan));
+async function registerInitialCatalog(db, plan, { apply = false, expectedCatalogVersion } = {}) {
+  if (expectedCatalogVersion !== undefined && expectedCatalogVersion !== 'deploy-test-v1') {
+    throw new RegistrationError('INVALID_PREVIOUS_VERSION', '이전 버전은 deploy-test-v1만 허용합니다.');
+  }
+  const initial = await readState(db, plan);
+  const options = { expectedCatalogVersion };
+  const check = assess(plan, initial, options);
   const result = report(plan, check, apply ? 'apply' : 'dry-run');
+  result.previousCatalogVersion = initial.settings?.catalogVersion ?? null;
+  result.expectedCatalogVersion = expectedCatalogVersion ?? null;
+  function unchangedSettings(state) {
+    if (!isDeepStrictEqual(state.settings, initial.settings)) throw new RegistrationError('SETTINGS_CHANGED', '사전 점검 이후 settings가 변경되었습니다.');
+  }
   if (check.issues.length) return { ...result, status: 'BLOCKED' };
   if (check.complete) return { ...result, status: 'ALREADY_REGISTERED', verification: 'passed' };
   if (!apply) return { ...result, status: 'DRY_RUN_OK', activated: false };
@@ -156,26 +169,37 @@ async function registerInitialCatalog(db, plan, { apply = false } = {}) {
   try {
     // Stage: create absent children only. Existing documents are NEVER changed.
     result.createdChildDocuments = await db.runTransaction(async (tx) => {
-      const current = assess(plan, await readState(db, plan, tx));
+      const state = await readState(db, plan, tx);
+      unchangedSettings(state);
+      const current = assess(plan, state, options);
       if (current.issues.length) throw new RegistrationError('CONFLICT', '사전 확인 후 충돌이 발생했습니다.', report(plan, current, 'apply'));
       for (const doc of current.missing) tx.create(db.doc(doc.path), doc.data);
       return current.missing.length;
     });
     phase = 'verify-children';
-    const staged = assess(plan, await readState(db, plan));
+    const staged = assess(plan, await readState(db, plan), options);
     if (staged.issues.length || staged.missing.length) throw new RegistrationError('STAGED_VERIFICATION_FAILED', '자식 문서 검증이 실패했습니다.', report(plan, staged, 'apply'));
     phase = 'activate';
     // Activation re-reads ALL children and active staff accounts in its own
     // transaction, so a concurrent mutation prevents/retries this activation.
-    result.createdMetadataDocuments = await db.runTransaction(async (tx) => {
+    const activation = await db.runTransaction(async (tx) => {
       const state = await readState(db, plan, tx);
-      const current = assess(plan, state);
+      unchangedSettings(state);
+      const current = assess(plan, state, options);
       if (current.issues.length || current.missing.length) throw new RegistrationError('ACTIVATION_CONFLICT', '활성화 전 검증이 실패했습니다.', report(plan, current, 'apply'));
       let count = 0;
+      let updated = 0;
       if (state.parent === null) { tx.create(db.doc(plan.parentPath), plan.metadata); count++; }
       if (state.settings === null) { tx.create(db.doc(plan.settingsPath), plan.settingsFields); count++; }
-      return count;
+      else if (state.settings.catalogVersion !== plan.catalogVersion) {
+        // The ONLY allowed update: explicitly confirmed predecessor pointer.
+        // All catalog documents remain create-only, and other settings fields survive.
+        tx.update(db.doc(plan.settingsPath), plan.settingsFields); updated++;
+      }
+      return { created: count, updated };
     });
+    result.createdMetadataDocuments = activation.created;
+    result.updatedSettingsDocuments = activation.updated;
     phase = 'verify-final';
     const final = assess(plan, await readState(db, plan));
     return { ...result, status: final.complete ? 'APPLIED' : 'VERIFICATION_FAILED',
@@ -188,6 +212,7 @@ async function registerInitialCatalog(db, plan, { apply = false } = {}) {
     return { ...result, status: 'APPLY_FAILED', phase, activated: null,
       createdChildDocuments: phase === 'stage' ? null : result.createdChildDocuments,
       createdMetadataDocuments: phase === 'activate' ? null : result.createdMetadataDocuments,
+      updatedSettingsDocuments: phase === 'activate' ? null : result.updatedSettingsDocuments,
       verification: 'not-completed', issues: error instanceof RegistrationError ? error.report?.issues || [] : [],
       errorCode: error instanceof RegistrationError ? error.code : 'FIRESTORE_OPERATION_FAILED',
       guidance: '자동 삭제·덮어쓰기하지 않았습니다. dry-run으로 서버 상태를 다시 확인하세요. 비활성 자식 문서만 남은 경우 값이 일치하면 안전하게 재실행할 수 있습니다.' };

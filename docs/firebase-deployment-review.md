@@ -91,6 +91,8 @@ Artifact Registry 이미지 정리 정책은 기존 이미지 사용 여부를 �
 
 ## 4. 사용자·기본 데이터의 정확한 구조
 
+후속 CLI의 현재 등록 대상은 **deploy-test-v2**다. 아래 v1 구조 예시는 필드 설명으로 보존한다. 불완전한 실제 v1을 수정하지 않는 등록·예상 이전 포인터 검증 절차는 [initial-catalog-cli.md](initial-catalog-cli.md)를 따른다. v1 manifest는 보존하며 v2 manifest의 자식 15개 데이터와 ID는 동일하다.
+
 기존 Auth 계정과 UID는 그대로 사용한다. users 문서는 필요한 필드만 추가/수정하고 기존 email/name 등은 유지한다.
 
 ```text

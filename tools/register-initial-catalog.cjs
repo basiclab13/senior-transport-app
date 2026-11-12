@@ -11,8 +11,10 @@ node tools/register-initial-catalog.cjs --project senior-transport-app --plan
 WRITE: add --apply --confirm-project senior-transport-app
 LOCAL TEST ONLY: --emulator --project demo-... [--apply --confirm-project demo-...]
 Default is read-only dry-run. --plan performs no Firebase access.
-Uses docs/fixtures/deploy-test-v1.baseline.json and operator ADC/IAM.
-Never updates or deletes existing documents. No --force or --scale option.`;
+Uses docs/fixtures/deploy-test-v2.baseline.json and operator ADC/IAM.
+POINTER TRANSITION: --expected-catalog-version deploy-test-v1 (verify first in dry-run).
+Catalogs are create-only. Only an explicitly confirmed settings pointer may change.
+No --force or --scale option; no deletes.`;
 
 function parseArguments(args, env = process.env) {
   const options = { apply: false, emulator: false, offline: false };
@@ -21,10 +23,10 @@ function parseArguments(args, env = process.env) {
     const name = args[i];
     if (seen.has(name)) throw new Error('DUPLICATE_OPTION');
     seen.add(name);
-    if (['--project','--confirm-project'].includes(name)) {
+    if (['--project','--confirm-project','--expected-catalog-version'].includes(name)) {
       const value = args[++i];
       if (!value || value.startsWith('--')) throw new Error('MISSING_OPTION_VALUE');
-      options[name === '--project' ? 'project' : 'confirmation'] = value;
+      options[name === '--project' ? 'project' : name === '--confirm-project' ? 'confirmation' : 'expectedCatalogVersion'] = value;
     } else if (name === '--apply') options.apply = true;
     else if (name === '--dry-run') options.dryRun = true;
     else if (name === '--emulator') options.emulator = true;
@@ -32,6 +34,7 @@ function parseArguments(args, env = process.env) {
     else throw new Error('UNKNOWN_OPTION');
   }
   if (!options.project || (options.emulator ? !/^demo-[a-z0-9-]+$/.test(options.project) : options.project !== EXPECTED_PROJECT)) throw new Error('PROJECT_MISMATCH');
+  if (options.expectedCatalogVersion !== undefined && options.expectedCatalogVersion !== 'deploy-test-v1') throw new Error('INVALID_PREVIOUS_VERSION');
   if (options.apply && (options.dryRun || options.offline)) throw new Error('CONFLICTING_MODES');
   if (options.apply && options.confirmation !== options.project) throw new Error('PROJECT_CONFIRMATION_REQUIRED');
   if (!options.apply && options.confirmation !== undefined) throw new Error('UNEXPECTED_CONFIRMATION');
@@ -56,7 +59,7 @@ async function main(args = process.argv.slice(2)) {
   let plan;
   try {
     options = parseArguments(args);
-    plan = makePlan(JSON.parse(readFileSync(resolve(__dirname, '../docs/fixtures/deploy-test-v1.baseline.json'), 'utf8')));
+    plan = makePlan(JSON.parse(readFileSync(resolve(__dirname, '../docs/fixtures/deploy-test-v2.baseline.json'), 'utf8')));
   } catch (error) {
     console.error(JSON.stringify({status:'REJECTED', errorCode:error.code || error.message,
       guidance:'프로젝트 ID, 실행 옵션, baseline manifest를 확인하세요. Firebase에는 연결하지 않았습니다.'}));
@@ -66,7 +69,7 @@ async function main(args = process.argv.slice(2)) {
     console.log(JSON.stringify({status:'OFFLINE_PLAN', projectId:options.project, databaseId:plan.databaseId,
       catalogVersion:plan.catalogVersion, counts:plan.counts, childDocuments:plan.documents.map((doc) => doc.path),
       activationDocuments:[plan.parentPath, plan.settingsPath], manifestSha256:plan.manifestSha256,
-      firebaseAccess:false, writes:false}, null, 2));
+      expectedCatalogVersion:options.expectedCatalogVersion ?? null, firebaseAccess:false, writes:false}, null, 2));
     return 0;
   }
   let app;
@@ -78,7 +81,7 @@ async function main(args = process.argv.slice(2)) {
     app = admin.initializeApp({projectId:options.project,
       ...(options.emulator ? {} : {credential:admin.applicationDefault()})}, 'initial-catalog-operator');
     const db = dependencies('firebase-admin/firestore').getFirestore(app);
-    const result = await registerInitialCatalog(db, plan, {apply:options.apply});
+    const result = await registerInitialCatalog(db, plan, {apply:options.apply, expectedCatalogVersion:options.expectedCatalogVersion});
     console.log(JSON.stringify({...result, projectId:options.project}, null, 2));
     return ['APPLIED','DRY_RUN_OK','ALREADY_REGISTERED'].includes(result.status) ? 0 : 2;
   } catch (_) {
