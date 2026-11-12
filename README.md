@@ -1,17 +1,59 @@
-# senior_transport_app
+﻿# 다정 송영 관리 MVP
 
-A new Flutter project.
+노인주간보호센터의 날짜별 송영 일정 조정 흐름을 시연하는 Flutter Web 시제품입니다.
+직원·이용자·주소·차량·코스는 모두 가상 데이터입니다.
 
-## Getting Started
+## 실행
 
-This project is a starting point for a Flutter application.
+```powershell
+flutter pub get
+flutter run -d chrome
+```
 
-A few resources to get you started if this is your first Flutter project:
+## 시연 순서
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+1. 관리자 화면에서 날짜와 오전/오후를 선택합니다. 해당 시간대의 기본 코스를 복사한 초안이 생성됩니다.
+2. 햇살 A코스의 가상 어르신 B를 결석 처리합니다. 방문 순서가 A → C로 변경됩니다.
+3. 필요하면 나무 B코스의 D를 햇살 A코스로 이동하고 위/아래 버튼으로 방문 순서를 바꿉니다.
+4. 하단의 전체 일정 검토 및 확정을 누르고 검토 창에서 확정하여 공유합니다.
+5. 상단에서 직원 역할로 전환합니다. 김다정 직원에게 확정된 햇살 A코스만 표시됩니다.
+6. 관리자로 돌아와 다시 수정한 뒤, 확정 전과 후의 직원 화면을 비교합니다. 수정 중에는 이전 확정본이 유지됩니다.
+7. 다른 날짜나 오후로 이동하면 원래 기본 코스가 유지됨을 확인합니다. 오전 변경은 오후에 자동 적용되지 않습니다.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+처음에는 확정본이 없으므로 직원 화면에 안내가 표시됩니다. 오전과 오후는 각각 확정합니다.
+결석 취소 시 이용자는 기본 코스의 마지막 순서로 복귀하며, 필요하면 순서를 수정합니다.
+정원 초과 등 오류가 생기면 수정한 후 확정할 수 있습니다.
+
+## 이번 시제품의 기준과 제한
+
+- 앱 실행 중 메모리에 초안과 최신 확정본을 별도로 보관합니다. 날짜·역할 전환 시 유지되지만 새로고침이나 재시작 시 초기화됩니다.
+- Firebase, AI API, 실제 로그인, 출퇴근 인증은 연결하지 않았습니다. 임시 역할 전환은 인증 기능이 아닙니다.
+- 다른 브라우저나 기기와 데이터를 공유하지 않습니다. 한 앱 안의 역할 전환으로 공유 흐름을 시연합니다.
+- 날짜별·시간대별 일정은 기본 코스에서 독립적으로 생성됩니다. 기본 코스 자체는 변경하지 않습니다.
+- 코스당 직원 1명과 차량 1대를 배정하며 동승자는 없습니다.
+- 가상 오전 운행은 08:00–09:30, 오후 운행은 16:00–17:30입니다. 같은 시간대의 코스는 동시에 운행한다고 가정하여 직원·차량 중복을 막습니다. 실제 이동 시간 계산이나 순차 운행 판단은 포함하지 않습니다.
+- 정원은 운전 직원을 제외한 이용자 수 기준의 임시 값입니다. 실제 운영 규칙을 확정한 값이 아닙니다.
+- 가상 직원 박여유는 금요일에 근무할 수 없도록 설정되어 있습니다.
+- 결석자 포함, 이용자 누락/중복, 직원·차량 중복, 직원 근무 불가, 정원 초과, 잘못된 참조를 확정 전에 검증합니다.
+- 일정 확정은 관리자의 검토와 명시적인 확정 조작으로만 이루어집니다.
+
+## 코드 구조
+
+- `lib/main.dart`: 앱 시작과 테마
+- `lib/models/transport.dart`: 직원, 이용자, 차량, 기본 코스, 날짜별 일정의 불변 모델
+- `lib/data/demo_data.dart`: 가상 직원·차량·이용자·기본 코스
+- `lib/services/schedule_controller.dart`: 메모리 데이터 관리, 날짜/역할 선택, 일정 편집, 검증, 확정
+- `lib/screens/schedule_screen.dart`: 관리자/직원 화면과 확정 검토 창
+- `test/schedule_controller_test.dart`: 날짜/시간대 격리, 재배정, 검증, 확정본 보존, 수정 권한
+- `test/widget_test.dart`: 결석부터 직원 조회까지의 화면 흐름과 모바일 레이아웃
+
+## 검증
+
+```powershell
+flutter analyze
+flutter test
+flutter build web
+```
+
+원래의 장기 요구사항은 `docs/project-overview.md`, `docs/requirements.md`, `docs/business-rules.md`를 참고합니다.
+이번 단계는 사용자 지정 범위에 따라 Firebase와 AI 구현을 보류합니다.
