@@ -8,6 +8,10 @@ Firebase Authentication의 이메일 로그인과 `users/{uid}` 역할 검증을
 
 ## 저장 구조
 
+실제 Firebase 초기 등록 기준은 직원 3명·차량 3대·이용자 5명·기본 코스 4개다. 40명·79명 fixture는 Emulator 부하 검증용이다. 필드 값과 등록 방법의 구분은 [initial-catalog-data.md](initial-catalog-data.md)를 참고한다.
+
+실제 초기 등록용 운영자 CLI의 dry-run·ADC·명시적 적용·충돌 처리는 [initial-catalog-cli.md](initial-catalog-cli.md)에 정리한다. 기존 Emulator 전용 등록 CLI와 분리되어 있으며 실제 데이터 변경은 수행하지 않았다.
+
 | 경로 | 내용 |
 |---|---|
 | `users/{uid}` | 기존 role/admin 또는 staff, active boolean, 직원 계정의 staffId |

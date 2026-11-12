@@ -59,7 +59,7 @@ Firebase Console → 프로젝트 설정/사용량 및 결제에서 현재 요�
 
 무료 할당량은 있으나 이 앱의 비용이 반드시 0원이라는 뜻은 아니다. 현재 코드는 한 번 확정할 때 전체 마스터를 읽고 모든 담당 직원의 문서를 갱신한다. 대규모 fixture는 직원 40 + 차량 40 + 이용자 79 + 기본 코스 78 = **기본 데이터 문서 237개**다. 시간대별 담당자 39명이면 신규 확정 시 전체 일정 1 + 직원 문서 39 + 영수증 1 = **41개 문서 쓰기**가 발생한다. 여기에 권한·버전 확인 읽기, 재시도, 재배정 삭제, 관리자 재조회와 직원 리스너 갱신이 추가된다. 이는 코드상 작업량 예시이며 청구액 견적은 아니다.
 
-처음 실제 서비스에서는 기준 데이터 3명/5명으로 시작해 확인 후 40명 규모로 확장하는 방식을 권장한다. 비용 자체를 낮추려면 추후 불변 catalog 캐싱과 변경 직원만 갱신하는 최적화를 별도로 검토할 수 있다.
+실제 Firebase 초기 등록 대상은 직원 3명·차량 3대·이용자 5명·기본 코스 4개의 기준 가상 데이터다. 직원 40명·이용자 79명 등 대규모 fixture는 Emulator 부하 검증용이며 실제 초기 등록 대상에 포함하지 않는다. 비용 자체를 낮추려면 추후 불변 catalog 캐싱과 변경 직원만 갱신하는 최적화를 별도로 검토할 수 있다.
 
 예산 알림을 설정하되, 알림은 사용·요금을 차단하지 않는다. Console에 제공되는 Functions용 서비스별 spend cap도 검토할 수 있다. 현재 Preview이며 집행 지연이 있어 절대적인 hard cap이 아니고, Firestore·빌드·이미지 보관 등 전체 프로젝트 비용을 모두 막는 것으로 해석하면 안 된다. [요금제·예산](https://firebase.google.com/docs/projects/billing/firebase-pricing-plans), [spend caps](https://firebase.google.com/docs/projects/billing/spend-caps)
 
@@ -154,7 +154,7 @@ deploy-test-v1은 예시다. 같은 버전이 이미 존재하면 새 이름을 
 node -e "require('node:fs').writeFileSync('fictional-catalog-review.json', JSON.stringify(require('./tools/fictional_catalog.cjs').fictionalCatalog(false), null, 2))"
 ```
 
-40명/79명 참조 파일이 필요하면 false를 true로 바꾼다. JSON의 id는 **문서 ID**로 사용한다. 이 파일은 Console 직접 등록용 참조 목록이며 Firebase CLI의 DB import 형식이 아니다. 실제 등록은 Console 운영자가 수행한다. 직원 40명 규모를 선택해도 Auth 계정을 40개 만들 필요는 없으며, 테스트할 직원의 계정만 기존 UID와 연결하면 된다.
+실제 초기 데이터에는 false를 유지한다. true는 Emulator 부하 검증용 40명/79명 데이터를 생성하므로 실제 등록에 사용하지 않는다. JSON의 id는 **문서 ID**로 사용한다. 이 파일은 참조 목록이며 Firebase CLI의 DB import 형식이 아니다. 정확한 기준 목록과 별도 관리자 일괄 등록 도구의 안전 조건은 [initial-catalog-data.md](initial-catalog-data.md)에 정리했다.
 
 등록 순서는 새 catalog(ready=false) → 자식 문서 전체 → ID/참조/타입 검증 → ready=true → settings/schedules의 catalogVersion 변경이다. 기존 활성 계정의 staffId 누락이 있으면 포인터를 변경하지 않는다.
 
