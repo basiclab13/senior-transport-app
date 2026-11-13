@@ -39,6 +39,7 @@ void main() {
 
   test('save failure preserves draft and reuses request ID on retry', () async {
     c.markAbsent('p2');
+    keepReviewedTimes(c);
     final edited = c.draft;
     repository.publishFailure = FirebaseFunctionsException(
       code: 'unavailable',
@@ -59,6 +60,7 @@ void main() {
 
   test('legacy server schedule rejection explains preservation and retains the draft', () async {
     c.markAbsent('p2');
+    keepReviewedTimes(c);
     final edited = c.draft;
     repository.publishFailure = FirebaseFunctionsException(
       code: 'failed-precondition',
@@ -96,6 +98,7 @@ void main() {
     'saving locks mutations/date changes until server acknowledgement',
     () async {
       c.markAbsent('p2');
+      keepReviewedTimes(c);
       repository.hold = Completer<void>();
       final save = c.publish();
       expect(c.saving, isTrue);
@@ -130,6 +133,7 @@ void main() {
 
   test('lost response is resolved only by a server commit receipt', () async {
     c.markAbsent('p2');
+    keepReviewedTimes(c);
     repository.snapshots[repository.key(c.selectedDate, c.period)] = c.draft
         .copyWith(version: 1, confirmedAt: DateTime.now());
     repository.receipt = true;
@@ -147,6 +151,7 @@ void main() {
     'own realtime commit is not mistaken for another administrator conflict',
     () async {
       c.markAbsent('p2');
+      keepReviewedTimes(c);
       repository.hold = Completer<void>();
       final publish = c.publish();
       repository.changes.add(

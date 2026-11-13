@@ -34,6 +34,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await openAdminEditor(tester);
   }
 
   Future<void> moveDialog(WidgetTester tester) async {
@@ -152,12 +153,27 @@ void main() {
     (tester) async {
       c.confirm();
       c.markAbsent('p2');
+      keepReviewedTimes(c);
       await open(tester);
       await tester.tap(find.byKey(const Key('confirm-schedule')));
       await tester.pumpAndSettle();
-      expect(find.text('확정본 v1 대비 변경사항 1항목'), findsOneWidget);
+      expect(find.text('공유된 일정에서 1항목이 바뀝니다.'), findsOneWidget);
+      expect(find.text('가상 어르신 B: 결석 처리'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('course-review-morning-a')));
+      await tester.pumpAndSettle();
       expect(find.text('가상 어르신 B: 결석 처리'), findsOneWidget);
       expect(find.text('김다정 · 햇살 A코스'), findsNothing);
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('review-all-schedules')),
+        120,
+        scrollable: find
+            .descendant(
+              of: find.byType(AlertDialog),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('review-all-schedules')));
       await tester.pumpAndSettle();
       expect(find.text('김다정 · 햇살 A코스'), findsOneWidget);
@@ -171,6 +187,10 @@ void main() {
       c.confirm();
       c.setVisitMinute('morning-a', 'p1', null);
       await open(tester);
+      expect(
+        tester.widget(find.byKey(const Key('confirm-schedule'))),
+        isA<TextButton>(),
+      );
       await tester.tap(find.byKey(const Key('confirm-schedule')));
       await tester.pumpAndSettle();
       expect(find.text('기존 확정 일정과 변경사항이 없습니다.'), findsOneWidget);
@@ -196,6 +216,7 @@ void main() {
       addTearDown(repo.changes.close);
       await open(tester);
       c.markAbsent('p2');
+      keepReviewedTimes(c);
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('confirm-schedule')));
       await tester.pumpAndSettle();
@@ -215,6 +236,7 @@ void main() {
   ) async {
     await open(tester);
     await tester.tap(find.byKey(const ValueKey('staff-s1')));
+    await tester.pumpAndSettle();
     tester.view.physicalSize = const Size(320, 568);
     await tester.pumpAndSettle();
     await moveDialog(tester);

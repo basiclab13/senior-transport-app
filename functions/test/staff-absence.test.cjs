@@ -212,6 +212,7 @@ test('A-1 date-specific absence, transactional confirmation and security (20 sta
       assert.equal((await confirm(db,'adminA',schedule(date,{expectedVersion:1}))).version,2);
     });
     await t.test('rules allow admin date lists / staff own reads only; every client write is denied', async () => {
+      // Includes the same read boundaries used by B-1 employee projections.
       const admin = env.authenticatedContext('adminA').firestore();
       const staff = env.authenticatedContext('staffA').firestore();
       const anon = env.unauthenticatedContext().firestore();
@@ -225,6 +226,81 @@ test('A-1 date-specific absence, transactional confirmation and security (20 sta
       const receipt = (await ref('2026-11-23').collection('commits').get()).docs[0].id;
       await assertSucceeds(getDoc(doc(admin,`${path}/commits/${receipt}`)));
       await assertFails(getDoc(doc(staff,`${path}/commits/${receipt}`)));
+    });
+    await t.test('B-1 provenance round-trips with own projections, legacy schedules, existing checks and atomic rejection', async () => {
+      const date='2026-12-21';
+      const original=schedule(date);
+      await confirm(db,'adminA',original);
+      const request=structuredClone(original);request.expectedVersion=1;request.requestId=randomUUID();
+      const route=request.routes[0];
+      route.estimatedVisitMinutes=Object.fromEntries(route.passengerIds.map((id,i)=>[id,540+i*5]));
+      route.estimatedVisitSources=Object.fromEntries(route.passengerIds.map((id)=>[id,'fixedInterval']));
+      assert.equal((await confirm(db,'adminA',request)).version,2);
+      const ref=db.doc(`schedules/${date}_morning`);
+      const saved=await ref.get();
+      assert.deepEqual(saved.data().routes[0].estimatedVisitSources,route.estimatedVisitSources);
+      const own=await assertSucceeds(getDoc(doc(env.authenticatedContext('staffA').firestore(),`staffSchedules/s1/days/${date}_morning`)));
+      assert.deepEqual(own.data().routes[0].estimatedVisitSources,route.estimatedVisitSources);
+      const projection=await db.doc(`staffSchedules/s1/days/${date}_morning`).get();
+      for(const mutate of [
+        r=>{r.estimatedVisitSources={p1:'unknown'};},
+        r=>{r.estimatedVisitSources={p999:'fixedInterval'};},
+        r=>{r.estimatedVisitSources=[];},
+        r=>{r.estimatedVisitSources=null;},
+        r=>{delete r.estimatedVisitMinutes.p1;},
+        r=>{r.estimatedVisitMinutes.p2=1440;},
+        r=>{r.estimatedVisitMinutes.p2=r.estimatedVisitMinutes.p1;},
+        r=>{r.estimatedVisitMinutes.p1=500;},
+      ]) {
+        const invalid=structuredClone(request);invalid.expectedVersion=2;invalid.requestId=randomUUID();mutate(invalid.routes[0]);
+        await rejects(confirm(db,'adminA',invalid),'invalid-argument');
+        assert.ok((await ref.get()).updateTime.isEqual(saved.updateTime));
+        assert.ok((await projection.ref.get()).updateTime.isEqual(projection.updateTime));
+        assert.equal((await ref.collection('commits').get()).size,2);
+      }
+      await rejects(confirm(db,'staffA',{...request,expectedVersion:2,requestId:randomUUID()}),'permission-denied');
+      const manual=structuredClone(request);manual.expectedVersion=2;manual.requestId=randomUUID();
+      manual.routes[0].estimatedVisitMinutes.p1=541;manual.routes[0].estimatedVisitSources.p1='manual';
+      assert.equal((await confirm(db,'adminA',manual)).version,3);
+      const legacy=structuredClone(manual);legacy.expectedVersion=3;legacy.requestId=randomUUID();delete legacy.routes[0].estimatedVisitSources;
+      assert.equal((await confirm(db,'adminA',legacy)).version,4);
+      assert.equal((await ref.get()).data().routes[0].estimatedVisitSources,undefined);
+    });
+    await t.test('B-2 20/80 transfer review: conflicting preserved times rejected atomically; reviewed estimates shared with staff', async () => {
+      const date='2026-12-28';
+      const original=schedule(date);
+      const pm=operationRequest(catalog,date,'afternoon','absence-v1',randomUUID());
+      await confirm(db,'adminA',original);await confirm(db,'adminA',pm);
+      const ref=db.doc(`schedules/${date}_morning`);
+      const before=await ref.get();
+      const afternoon=await db.doc(`schedules/${date}_afternoon`).get();
+      const request=structuredClone(original);request.expectedVersion=1;request.requestId=randomUUID();
+      const source=request.routes[0],target=request.routes.find(r=>r.staffId==='s4');
+      source.passengerIds=source.passengerIds.filter(id=>id!=='p1');
+      const preserved=source.estimatedVisitMinutes.p1;delete source.estimatedVisitMinutes.p1;
+      target.passengerIds.push('p1');target.estimatedVisitMinutes.p1=preserved;
+      await rejects(confirm(db,'adminA',request),'invalid-argument');
+      assert.ok((await ref.get()).updateTime.isEqual(before.updateTime));
+      assert.equal((await ref.collection('commits').get()).size,1);
+      // Explicitly accepted recalculation result, while other course times stay intact.
+      target.estimatedVisitMinutes=Object.fromEntries(target.passengerIds.map((id,i)=>[id,540+5*i]));
+      target.estimatedVisitSources=Object.fromEntries(target.passengerIds.map(id=>[id,'fixedInterval']));
+      const results=await Promise.all([confirm(db,'adminA',request),confirm(db,'adminA',request)]);
+      assert.ok(results.every(result=>result.version===2));
+      const saved=(await ref.get()).data();
+      assert.deepEqual(saved.routes[0].estimatedVisitMinutes,source.estimatedVisitMinutes);
+      assert.equal(saved.routes.flatMap(r=>r.passengerIds).length,80);
+      assert.equal(new Set(saved.routes.flatMap(r=>r.passengerIds)).size,80);
+      assert.deepEqual(saved.routes.find(r=>r.staffId==='s4'),target);
+      assert.ok((await afternoon.ref.get()).updateTime.isEqual(afternoon.updateTime));
+      assert.equal((await ref.collection('commits').get()).size,2);
+      await db.doc('users/b2staff4').set({active:true,role:'staff',staffId:'s4'});
+      const staff=env.authenticatedContext('b2staff4').firestore();
+      const own=await assertSucceeds(getDoc(doc(staff,`staffSchedules/s4/days/${date}_morning`)));
+      assert.deepEqual(own.data().routes,[target]);
+      await assertFails(getDoc(doc(staff,`staffSchedules/s1/days/${date}_morning`)));
+      await rejects(confirm(db,'staffA',{...request,requestId:randomUUID(),expectedVersion:2}),'permission-denied');
+      await rejects(confirm(db,'adminB',{...request,requestId:randomUUID()}),'aborted');
     });
   } finally { await env.cleanup(); await deleteApp(app); }
 });

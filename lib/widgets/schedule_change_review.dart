@@ -4,6 +4,7 @@ import '../models/schedule_catalog.dart';
 import '../models/schedule_changes.dart';
 import '../models/transport.dart';
 import '../services/schedule_selection_policy.dart';
+import 'course_change_details.dart';
 
 class ScheduleChangeReview extends StatelessWidget {
   const ScheduleChangeReview({
@@ -36,9 +37,12 @@ class ScheduleChangeReview extends StatelessWidget {
       ),
       const SizedBox(height: 8),
       Text(
-        remote
-            ? '전체 직원 변경사항을 서버에서 다시 검증하고 Firestore에 함께 저장합니다.'
-            : '로컬 테스트 일정입니다.',
+        remote ? '최종 일정 확정 후 직원에게 공유됩니다.' : '테스트 데이터 · 최종 확정 전 변경 내용을 확인해 주세요.',
+      ),
+      Text(
+        '${changes.initial ? '처음 확정할' : '변경할'} 코스 ${changedCourseIds(changes, snapshot).length}개',
+        key: const Key('changed-course-count'),
+        style: Theme.of(context).textTheme.titleLarge,
       ),
       const SizedBox(height: 12),
       Text(
@@ -46,27 +50,32 @@ class ScheduleChangeReview extends StatelessWidget {
             ? '이전 확정 일정이 없습니다. 첫 확정입니다.'
             : changes.items.isEmpty
             ? '기존 확정 일정과 변경사항이 없습니다.'
-            : '확정본 v${baseline!.version} 대비 변경사항 ${changes.items.length}항목',
+            : '공유된 일정에서 ${changes.items.length}항목이 바뀝니다.',
         key: const Key('change-summary'),
         style: Theme.of(context).textTheme.titleMedium,
       ),
-      for (final kind in ScheduleChangeKind.values)
-        if (changes.items.any((item) => item.kind == kind)) ...[
-          const SizedBox(height: 12),
-          Text(
-            '${kind.label} (${changes.items.where((item) => item.kind == kind).length})',
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-          for (final item in changes.items.where((item) => item.kind == kind))
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(item.description),
-            ),
+      Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        children: [
+          for (final kind in ScheduleChangeKind.values)
+            if (changes.items.any((item) => item.kind == kind))
+              Chip(
+                label: Text(
+                  '${kind.label} (${changes.items.where((item) => item.kind == kind).length})',
+                ),
+              ),
         ],
+      ),
+      CourseChangeDetails(
+        catalog: catalog,
+        before: baseline,
+        after: snapshot,
+        changes: changes,
+      ),
       const Divider(height: 24),
       ExpansionTile(
         key: const Key('review-all-schedules'),
-        initiallyExpanded: changes.initial,
         title: Text('전체 일정 ${snapshot.routes.length}개 코스 보기'),
         children: [
           for (final r in snapshot.routes)

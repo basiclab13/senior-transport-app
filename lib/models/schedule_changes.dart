@@ -19,9 +19,11 @@ enum ScheduleChangeKind {
 }
 
 class ScheduleChange {
-  const ScheduleChange(this.kind, this.description);
+  const ScheduleChange(this.kind, this.description, {this.routeIds = const {}});
   final ScheduleChangeKind kind;
   final String description;
+  // UI grouping only. Never included in schedule payloads or Firestore.
+  final Set<String> routeIds;
 }
 
 /// Presentation-only diff. It never mutates drafts, versions or publish payloads.
@@ -46,6 +48,7 @@ class ScheduleChanges {
             ScheduleChange(
               ScheduleChangeKind.staff,
               '${catalog.baseRoutes.firstWhere((base) => base.id == route.baseRouteId).name}: ${catalog.staff.firstWhere((s) => s.id == catalog.baseRoutes.firstWhere((base) => base.id == route.baseRouteId).staffId).name} → ${catalog.staff.firstWhere((s) => s.id == route.staffId).name} (기본 배정 대비)',
+              routeIds: {route.baseRouteId},
             ),
       ]);
     }
@@ -54,8 +57,11 @@ class ScheduleChanges {
       throw ArgumentError('같은 날짜·시간대의 일정만 비교할 수 있습니다.');
     }
     final changes = <ScheduleChange>[];
-    void add(ScheduleChangeKind kind, String description) =>
-        changes.add(ScheduleChange(kind, description));
+    void add(
+      ScheduleChangeKind kind,
+      String description,
+      Set<String> routeIds,
+    ) => changes.add(ScheduleChange(kind, description, routeIds: routeIds));
     String person(String id) =>
         catalog.passengers.where((p) => p.id == id).firstOrNull?.name ?? id;
     String staff(String id) =>
@@ -77,6 +83,7 @@ class ScheduleChanges {
         add(
           ScheduleChangeKind.route,
           '${routeName(id)}: ${old == null ? '코스 추가' : '코스 제거'}',
+          {id},
         );
         continue;
       }
@@ -84,12 +91,14 @@ class ScheduleChanges {
         add(
           ScheduleChangeKind.staff,
           '${routeName(id)}: ${staff(old.staffId)} → ${staff(next.staffId)}',
+          {id},
         );
       }
       if (old.vehicleId != next.vehicleId) {
         add(
           ScheduleChangeKind.vehicle,
           '${routeName(id)}: ${vehicle(old.vehicleId)} → ${vehicle(next.vehicleId)}',
+          {id},
         );
       }
       // A transfer/absence alone is not a relative order change of remaining stops.
@@ -103,6 +112,7 @@ class ScheduleChanges {
         add(
           ScheduleChangeKind.order,
           '${location(next)}\n이전: ${order(old.passengerIds)}\n변경: ${order(next.passengerIds)}',
+          {id},
         );
       }
       if (old.startMinute != next.startMinute ||
@@ -110,6 +120,7 @@ class ScheduleChanges {
         add(
           ScheduleChangeKind.time,
           '${location(next)} 운행: ${minuteLabel(old.startMinute)}–${minuteLabel(old.endMinute)} → ${minuteLabel(next.startMinute)}–${minuteLabel(next.endMinute)}',
+          {id},
         );
       }
     }
@@ -130,6 +141,18 @@ class ScheduleChanges {
       final next = after.routes
           .where((r) => r.passengerIds.contains(id))
           .toList();
+      final affectedRoutes = {
+        for (final r in [...old, ...next]) r.baseRouteId,
+      };
+      if (affectedRoutes.isEmpty) {
+        affectedRoutes.addAll(
+          catalog.baseRoutes
+              .where(
+                (r) => r.period == after.period && r.passengerIds.contains(id),
+              )
+              .map((r) => r.id),
+        );
+      }
       final oldLocations =
           old.map((r) => '${r.staffId}/${r.baseRouteId}').toList()..sort();
       final newLocations =
@@ -142,18 +165,21 @@ class ScheduleChanges {
           ScheduleChangeKind.assignment,
           '${person(id)}: ${assignment(old)} → ${assignment(next)}'
           '${old.length == 1 && next.length == 1 ? ' (방문 ${old.single.passengerIds.indexOf(id) + 1}번째 → ${next.single.passengerIds.indexOf(id) + 1}번째)' : ''}',
+          affectedRoutes,
         );
       }
       if (before.absentIds.contains(id) != after.absentIds.contains(id)) {
         add(
           ScheduleChangeKind.absence,
           '${person(id)}: ${after.absentIds.contains(id) ? '결석 처리' : '결석 해제'}',
+          affectedRoutes,
         );
       }
       if (before.excludedIds.contains(id) != after.excludedIds.contains(id)) {
         add(
           ScheduleChangeKind.exclusion,
           '${person(id)}: ${after.excludedIds.contains(id) ? '제외 처리' : '제외 해제'}',
+          affectedRoutes,
         );
       }
       if (old.length == 1 &&
@@ -163,6 +189,17 @@ class ScheduleChanges {
         add(
           ScheduleChangeKind.time,
           '${person(id)} 방문: ${minuteLabel(old.single.estimatedVisitMinutes[id])} → ${minuteLabel(next.single.estimatedVisitMinutes[id])} · ${assignment(next)}',
+          affectedRoutes,
+        );
+      } else if (old.length == 1 &&
+          next.length == 1 &&
+          old.single.estimatedVisitMinutes.containsKey(id) &&
+          next.single.estimatedVisitMinutes.containsKey(id) &&
+          old.single.isManualEstimate(id) != next.single.isManualEstimate(id)) {
+        add(
+          ScheduleChangeKind.time,
+          '${person(id)} 예상 시각 출처: ${old.single.isManualEstimate(id) ? '수동' : '고정 간격'} → ${next.single.isManualEstimate(id) ? '수동' : '고정 간격'} · ${assignment(next)}',
+          affectedRoutes,
         );
       }
     }

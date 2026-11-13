@@ -1,8 +1,9 @@
 'use strict';
 const {fictionalCatalog} = require('./fictional_catalog.cjs');
+const {withFictionalLocations}=require('../functions/schedule-distance');
 
 // Emulator-only operational scale. Existing baseline IDs, routes and order survive.
-function operationsCatalog() {
+function operationsCatalog({withLocations=false}={}) {
   const catalog = fictionalCatalog(false);
   let passengerNumber = 6;
   for (let i=4;i<=20;i++) {
@@ -20,7 +21,7 @@ function operationsCatalog() {
       passengerIds:period==='morning'?[...ids]:[...ids].reverse(),
     });
   }
-  return catalog;
+  return withLocations?withFictionalLocations(catalog):catalog;
 }
 
 function operationRequest(catalog,date,period,catalogVersion,requestId,expectedVersion=0) {

@@ -71,17 +71,15 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await openAdminEditor(tester);
     c.selectDate(DateTime(2026, 11, 16));
     await tester.pumpAndSettle();
   }
 
   Future<void> overview(WidgetTester tester, {bool passengers = false}) async {
-    await tester.tap(
-      find.byKey(
-        Key(passengers ? 'open-passenger-search' : 'open-assignment-overview'),
-      ),
-    );
+    await tester.tap(find.byKey(const Key('admin-overview')));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('dashboard-search')));
   }
 
   testWidgets(
@@ -89,17 +87,14 @@ void main() {
     (tester) async {
       await open(tester);
       await overview(tester);
-      expect(
-        find.textContaining('직원 20명 · 코스 20개 · 배정 80/80명'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('배정 80명 · 결석 0명 · 미배정 0명'), findsOneWidget);
       await tester.enterText(
-        find.byKey(const Key('assignment-search')),
+        find.byKey(const Key('dashboard-search')),
         '가상 직원 20',
       );
       await tester.pumpAndSettle();
       expect(find.text('가상 20코스\n가상 차량 20'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('overview-staff-s20')));
+      await tester.tap(find.byKey(const ValueKey('dashboard-staff-s20')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('staff-detail-s20')), findsOneWidget);
       expect(c.hasPendingChanges, isFalse);
@@ -116,14 +111,13 @@ void main() {
       await tester.pumpAndSettle();
       await overview(tester, passengers: true);
       await tester.enterText(
-        find.byKey(const Key('assignment-search')),
+        find.byKey(const Key('dashboard-search')),
         '가상 이용자 80',
       );
       await tester.pumpAndSettle();
-      expect(find.textContaining('가상 직원 20 · 가상 20코스'), findsOneWidget);
-      await tester.tap(
-        find.byKey(const ValueKey('find-passenger-p80-morning-20')),
-      );
+      expect(find.text('가상 직원 20'), findsOneWidget);
+      expect(find.text('가상 20코스\n가상 차량 20'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('dashboard-staff-s20')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('staff-detail-s20')), findsOneWidget);
       await tester.ensureVisible(find.byKey(const ValueKey('time-p80')));
@@ -163,15 +157,12 @@ void main() {
       expect(repository.requests, isEmpty);
       await overview(tester, passengers: true);
       await tester.enterText(
-        find.byKey(const Key('assignment-search')),
+        find.byKey(const Key('dashboard-search')),
         '가상 이용자 01',
       );
       await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('find-passenger-p1-morning-2')),
-        findsOneWidget,
-      );
-      expect(find.textContaining('미확정 변경 포함'), findsOneWidget);
+      expect(find.byKey(const ValueKey('dashboard-staff-s2')), findsOneWidget);
+      expect(find.textContaining('변경 중인 일정'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -187,20 +178,19 @@ void main() {
       await tester.pumpAndSettle();
       await overview(tester, passengers: true);
       expect(
-        tester.widget<Text>(find.byKey(const Key('overview-summary'))).data,
-        contains('2026-11-17 · 오후'),
+        tester
+            .widget<Text>(find.byKey(const Key('selected-schedule-label')))
+            .data,
+        contains('11월 17일 (화) · 오후'),
       );
-      expect(find.textContaining('배정 79/80명 · 결석 1명'), findsOneWidget);
+      expect(find.textContaining('배정 79명 · 결석 1명'), findsOneWidget);
       await tester.enterText(
-        find.byKey(const Key('assignment-search')),
+        find.byKey(const Key('dashboard-search')),
         '가상 이용자 80',
       );
       await tester.pumpAndSettle();
-      expect(find.textContaining('결석 · 기본 코스 담당 가상 직원 20'), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('find-passenger-p80-afternoon-20')),
-        findsOneWidget,
-      );
+      expect(find.text('가상 이용자 80 · 결석'), findsOneWidget);
+      expect(find.byKey(const ValueKey('dashboard-staff-s20')), findsOneWidget);
       expect(repository.requests, isEmpty);
       expect(tester.takeException(), isNull);
     },
@@ -245,13 +235,11 @@ void main() {
       await open(tester, small: true);
       await overview(tester, passengers: true);
       await tester.enterText(
-        find.byKey(const Key('assignment-search')),
+        find.byKey(const Key('dashboard-search')),
         '가상 이용자 80',
       );
       await tester.pumpAndSettle();
-      await tester.tap(
-        find.byKey(const ValueKey('find-passenger-p80-morning-20')),
-      );
+      await tester.tap(find.byKey(const ValueKey('dashboard-staff-s20')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('staff-detail-s20')), findsOneWidget);
       await tester.tap(find.byKey(const Key('back-to-staff')));

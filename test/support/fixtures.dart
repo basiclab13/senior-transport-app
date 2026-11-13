@@ -1,5 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
 import 'package:senior_transport_app/data/demo_data.dart';
 import 'package:senior_transport_app/models/app_user.dart';
 import 'package:senior_transport_app/models/schedule_catalog.dart';
@@ -8,6 +11,42 @@ import 'package:senior_transport_app/services/schedule_controller.dart';
 import 'package:senior_transport_app/services/schedule_repository.dart';
 
 DateTime fixtureClock() => DateTime.utc(2026, 11, 12, 0);
+
+/// Existing editor regressions explicitly enter the editor from the new home.
+Future<void> openAdminEditor(WidgetTester tester) async {
+  if (find.byKey(const Key('admin-dashboard')).evaluate().isNotEmpty) {
+    await tester.tap(find.byKey(const Key('admin-editor')));
+    await tester.pumpAndSettle();
+  }
+}
+
+Future<void> openStaffInfo(WidgetTester tester, String id) async {
+  if (find.byKey(ValueKey('staff-absence-$id')).evaluate().isNotEmpty ||
+      find.byKey(ValueKey('attendance-$id')).evaluate().isNotEmpty) {
+    return;
+  }
+  final tile = find.byKey(ValueKey('staff-info-$id'));
+  await tester.scrollUntilVisible(
+    tile,
+    -100,
+    scrollable: find
+        .descendant(
+          of: find.byKey(ValueKey('staff-detail-$id')),
+          matching: find.byType(Scrollable),
+        )
+        .first,
+  );
+  await tester.tap(tile);
+  await tester.pumpAndSettle();
+}
+
+/// Existing flow tests explicitly acknowledge unchanged, valid visit estimates.
+/// B-2 tests exercise the pending gate and the actual confirmation dialog.
+void keepReviewedTimes(ScheduleController c) {
+  for (final id in c.pendingTimeReviewRouteIds) {
+    c.keepVisitTimes(id);
+  }
+}
 
 ScheduleCatalog demoCatalog() => ScheduleCatalog(
   version: 'test-v1',

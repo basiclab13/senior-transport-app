@@ -1,5 +1,11 @@
 # Firestore 송영 일정 연동과 로컬 검증
 
+> 생성형 AI 일정 제안 MVP는 Emulator 전용 `suggestSchedule`의 읽기 전용 추천을 관리자가 초안에 승인·반영한 뒤 기존 확정 절차를 사용한다. 스키마와 Rules는 추가하지 않으며 설정·시연은 [ai-schedule-mvp.md](ai-schedule-mvp.md)를 참고한다.
+
+> B-2의 예상 시각 재검토 상태는 날짜·시간대별 로컬 초안에만 두며 Firestore 스키마나 권한 규칙을 추가하지 않는다. 서버 검증을 유지하는 흐름은 [visit-time-review-b2.md](visit-time-review-b2.md)를 참고한다.
+
+> B-1은 route의 선택적 `estimatedVisitSources`(manual/fixedInterval)를 추가하며 schemaVersion 1과 기존 시각 필드를 유지한다. 출처 없는 기존 시각은 수동으로 보호한다. 새 서버 검증과 미리보기 절차는 [bulk-visit-times-b1.md](bulk-visit-times-b1.md)를 참고한다.
+
 날짜별 직원 결근의 스키마·트랜잭션·기존 확정본의 운행 가능 여부 판단은 [staff-absence-a1.md](staff-absence-a1.md)를 함께 확인한다. 확정 상태만으로 정상 운행 가능하다고 판단하지 않고 현재 날짜별 결근을 함께 조회한다.
 
 ## 구현 범위

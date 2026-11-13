@@ -6,6 +6,8 @@ Map<String, dynamic> routeToJson(RouteAssignment route) => {
   'vehicleId': route.vehicleId,
   'passengerIds': route.passengerIds,
   'estimatedVisitMinutes': route.estimatedVisitMinutes,
+  if (route.estimatedVisitSources.isNotEmpty)
+    'estimatedVisitSources': route.estimatedVisitSources,
   'startMinute': route.startMinute,
   'endMinute': route.endMinute,
 };
@@ -40,6 +42,9 @@ ScheduleSnapshot scheduleFromJson(
         passengerIds: List<String>.from(r['passengerIds'] as List),
         estimatedVisitMinutes: Map<String, int>.from(
           r['estimatedVisitMinutes'] as Map,
+        ),
+        estimatedVisitSources: Map<String, String>.from(
+          r['estimatedVisitSources'] as Map? ?? const {},
         ),
         startMinute: r['startMinute'] as int?,
         endMinute: r['endMinute'] as int?,

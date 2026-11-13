@@ -128,11 +128,11 @@ class _AdminAssignmentOverviewState extends State<AdminAssignmentOverview> {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
                     '${dateKey(c.selectedDate)} · ${c.period.label} · ${c.hasPendingChanges
-                        ? '미확정 변경 포함'
+                        ? '변경 중인 일정'
                         : c.confirmed == null
-                        ? '기본 배정 초안'
+                        ? '아직 확정하지 않은 일정'
                         : c.confirmedReassignmentNeeded
-                        ? '확정 이력 · 재배정 필요'
+                        ? '공유된 일정 · 다른 직원 배정 필요'
                         : '확정 일정'}\n'
                     '직원 ${c.catalog.staff.length}명 · 코스 ${c.draft.routes.length}개 · 배정 ${assigned.length}/${expected.length}명 · 결석 ${c.draft.absentIds.length}명 · 제외 ${c.draft.excludedIds.length}명 · 미배정 ${missing.length}명',
                     key: const Key('overview-summary'),
@@ -142,15 +142,22 @@ class _AdminAssignmentOverviewState extends State<AdminAssignmentOverview> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
-                  '직원 결근 ${c.catalog.staff.where((s) => c.isStaffAbsent(s.id)).length}명 · 재배정 필요 ${c.draft.routes.where((r) => c.isStaffAbsent(r.staffId)).length}코스',
+                  '직원 결근 ${c.catalog.staff.where((s) => c.isStaffAbsent(s.id)).length}명 · 다른 직원 배정 필요 ${c.draft.routes.where((r) => c.isStaffAbsent(r.staffId)).length}코스',
                   key: const Key('overview-staff-absence'),
                 ),
               ),
+              if (c.pendingTimeReviewRouteIds.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    '방문 시간 확인 필요 ${c.pendingTimeReviewRouteIds.length}코스 · 직원 상세에서 검토해 주세요.',
+                  ),
+                ),
               if (c.validationErrors.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
-                    '검증 오류 ${c.validationErrors.length}건 · 전체 일정 검증에서 상세 내용을 확인하세요.',
+                    '확인할 문제 ${c.validationErrors.length}건 · 전체 일정 검증에서 상세 내용을 확인하세요.',
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.error,
                     ),
@@ -229,7 +236,7 @@ class _AdminAssignmentOverviewState extends State<AdminAssignmentOverview> {
   Widget _staff(Staff staff, bool wide) {
     final routes = c.routesForStaff(staff.id);
     final work = c.isStaffAbsent(staff.id)
-        ? '결근${routes.isNotEmpty ? ' · 재배정 필요' : ''}'
+        ? '결근${routes.isNotEmpty ? ' · 다른 직원 배정 필요' : ''}'
         : c.staffAvailable(staff)
         ? '근무 가능'
         : '근무 불가';

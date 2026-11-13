@@ -80,7 +80,7 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: '다정 송영 관리',
+    title: '송영도우미',
     debugShowCheckedModeBanner: false,
     theme: ThemeData(
       useMaterial3: true,

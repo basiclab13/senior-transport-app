@@ -31,6 +31,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await openAdminEditor(tester);
   }
 
   testWidgets('PC 직원 목록과 한 직원의 상세를 나란히 표시한다', (tester) async {
@@ -123,11 +124,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(c.routesForStaff('s1').single.passengerIds, ['p1', 'p3', 'p4']);
     expect(c.routesForStaff('s2').single.passengerIds, ['p5']);
+    keepReviewedTimes(c);
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('confirm-schedule')));
     await tester.pumpAndSettle();
     expect(c.confirmed, isNull);
-    expect(find.text('김다정 · 햇살 A코스'), findsOneWidget);
-    expect(find.text('이온유 · 나무 B코스'), findsOneWidget);
+    expect(find.text('햇살 A코스 · 김다정'), findsOneWidget);
+    expect(find.text('나무 B코스 · 이온유'), findsOneWidget);
     await tester.tap(find.byKey(const Key('approve-confirm')));
     await tester.pumpAndSettle();
     expect(c.confirmed!.routes.first.passengerIds, ['p1', 'p3', 'p4']);

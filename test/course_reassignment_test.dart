@@ -178,6 +178,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await openAdminEditor(tester);
   }
 
   testWidgets(
@@ -209,6 +210,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(c.draft.routes.first.staffId, 's3');
       expect(c.confirmed!.routes.first.staffId, 's1');
+      keepReviewedTimes(c);
+      await tester.pumpAndSettle(const Duration(seconds: 5));
       await tester.tap(find.byKey(const Key('confirm-schedule')));
       await tester.pumpAndSettle();
       expect(find.textContaining('김다정 → 박여유'), findsOneWidget);

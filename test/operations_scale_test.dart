@@ -65,19 +65,20 @@ void main() {
             .onPressed,
         isNull,
       );
-      await tester.tap(find.byKey(const Key('open-passenger-search')));
+      await openAdminEditor(tester);
+      await tester.tap(find.byKey(const Key('admin-overview')));
       await tester.pumpAndSettle();
       final summary = tester
-          .widget<Text>(find.byKey(const Key('overview-summary')))
+          .widget<Text>(find.byKey(const Key('dashboard-assignment-summary')))
           .data!;
-      expect(summary, contains('배정 79/80명'));
+      expect(summary, contains('배정 79명'));
       expect(summary, contains('미배정 1명'));
       await tester.enterText(
-        find.byKey(const Key('assignment-search')),
+        find.byKey(const Key('dashboard-search')),
         '가상 이용자 80',
       );
       await tester.pumpAndSettle();
-      expect(find.textContaining('미배정 · 기본 코스 담당 가상 직원 20'), findsOneWidget);
+      expect(find.text('가상 이용자 80 · 미배정'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -128,7 +129,7 @@ void main() {
       expect(find.byKey(const Key('staff-search')), findsNothing);
       c.selectPeriod(TransportPeriod.afternoon);
       await tester.pumpAndSettle();
-      expect(find.text('아직 확정된 일정이 없습니다.'), findsOneWidget);
+      expect(find.text('아직 확정된 일정이 없습니다. 관리자에게 확인해 주세요.'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

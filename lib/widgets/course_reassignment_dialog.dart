@@ -65,7 +65,7 @@ class _CourseReassignmentDialogState extends State<CourseReassignmentDialog> {
               child: Row(
                 children: [
                   const Expanded(
-                    child: Text('결근 코스 전체 재배정', style: TextStyle(fontSize: 20)),
+                    child: Text('대신 담당할 직원 선택', style: TextStyle(fontSize: 20)),
                   ),
                   IconButton(
                     tooltip: '닫기',
@@ -86,7 +86,7 @@ class _CourseReassignmentDialogState extends State<CourseReassignmentDialog> {
               child: TextField(
                 key: const Key('course-transfer-search'),
                 decoration: const InputDecoration(
-                  labelText: '코스 인계 직원 이름 검색',
+                  labelText: '직원 이름 검색',
                   prefixIcon: Icon(Icons.search),
                 ),
                 onChanged: (value) => setState(() => _query = value),

@@ -97,22 +97,17 @@ void main() {
     await tester.tap(find.byTooltip('다음 날짜'));
     await tester.pumpAndSettle();
     expect(find.text('내일 · 11월 13일 (금) · 오후'), findsOneWidget);
-    expect(find.text('아직 확정된 일정이 없습니다.'), findsOneWidget);
+    expect(find.text('아직 확정된 일정이 없습니다. 관리자에게 확인해 주세요.'), findsOneWidget);
     expect(find.byKey(const ValueKey('timeline-p3')), findsNothing);
     await tester.tap(find.byTooltip('이전 날짜'));
     await tester.pumpAndSettle();
     expect(find.text('예상 16:10'), findsOneWidget);
   });
 
-  testWidgets('출퇴근 사진 인증 안내로 이동하며 저장된 것처럼 표시하지 않는다', (tester) async {
+  testWidgets('첫 화면의 미연결 사진 안내는 저장된 것처럼 표시하지 않는다', (tester) async {
     await open(tester);
-    await tester.tap(find.byKey(const Key('attendance')));
-    await tester.pumpAndSettle();
-    expect(find.text('사진 인증 기능 준비 중'), findsOneWidget);
-    expect(find.textContaining('출퇴근 인증이 기록되지 않습니다'), findsOneWidget);
-    expect(find.textContaining('김다정 · 2026-11-12 · 오전'), findsOneWidget);
-    await tester.tap(find.text('내 일정으로 돌아가기'));
-    await tester.pumpAndSettle();
-    expect(find.text('직원 화면'), findsOneWidget);
+    expect(find.text('사진 등록은 Emulator 시연 환경에서 사용할 수 있습니다.'), findsOneWidget);
+    expect(find.byKey(const Key('register-work-start')), findsNothing);
+    expect(find.text('내 송영 일정'), findsOneWidget);
   });
 }

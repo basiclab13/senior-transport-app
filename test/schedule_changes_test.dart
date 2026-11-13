@@ -55,7 +55,7 @@ void main() {
     expect(result.items, isEmpty);
   });
 
-  test('transfer, absence, exclusion, vehicle and cleared visit estimate are visible without false order changes', () {
+  test('transfer, absence, exclusion and vehicle changes preserve visit estimates without false order changes', () {
     c.setVisitMinute('morning-a', 'p1', 490);
     c.confirm();
     final before = c.confirmed!;
@@ -71,7 +71,6 @@ void main() {
         ScheduleChangeKind.absence,
         ScheduleChangeKind.exclusion,
         ScheduleChangeKind.vehicle,
-        ScheduleChangeKind.time,
       ]),
     );
     expect(
@@ -86,7 +85,7 @@ void main() {
     );
     expect(
       result.items.any((i) => i.description.contains('08:10 → 미입력')),
-      isTrue,
+      isFalse,
     );
     expect(before.routes.first.passengerIds, ['p1', 'p2', 'p3']);
     expect(before.absentIds, isEmpty);
@@ -151,6 +150,7 @@ void main() {
   test('absence and exclusion restoration show status removal and restored assignments', () {
     c.markAbsent('p1');
     c.excludePassenger('p2');
+    keepReviewedTimes(c);
     c.confirm();
     final before = c.confirmed!;
     c.restorePassenger('p1');

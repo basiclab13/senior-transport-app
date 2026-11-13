@@ -1,5 +1,11 @@
 # 직원 중심 송영 일정 화면
 
+> 관리자 AI 일정 제안·이유/변경 검토·명시적 초안 적용은 [ai-schedule-mvp.md](ai-schedule-mvp.md)를 참고한다. 실제 Gemini 호출은 서버 Secret 설정 후 Emulator에서만 수행하며 기존 직원 화면과 확정 절차를 유지한다.
+
+> B-2 일정 변경 후 예상 시각 재검토·미리보기·명시적 유지와 확정 차단은 [visit-time-review-b2.md](visit-time-review-b2.md)를 참고한다.
+
+> B-1의 고정 간격 예상 방문 시각 미리보기·수동 보호·명시적 적용은 [bulk-visit-times-b1.md](bulk-visit-times-b1.md)를 참고한다. 이전 담당 직원의 결근·인계 완료 표시 문제는 [별도 개선 항목](known-issues.md)으로 관리한다.
+
 > 결근 직원 상세에서 코스 전체를 넘기는 A-2 흐름과 배포 전 검토사항은 [staff-absence-a2.md](staff-absence-a2.md)를 참고한다.
 
 > A-1 관리자 날짜별 결근 등록·취소 및 확정 이력의 재배정 필요 표시는 [staff-absence-a1.md](staff-absence-a1.md)를 참고한다. 직원 마스터와 사용자 권한은 바꾸지 않는다.

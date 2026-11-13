@@ -56,6 +56,7 @@ void main() {
     c.markAbsent('p2');
     expect(c.confirmed!.routes.first.passengerIds, contains('p2'));
     expect(c.confirmed, same(previous));
+    keepReviewedTimes(c);
     c.confirm();
     expect(c.confirmed!.version, 2);
     expect(c.confirmed!.routes.first.passengerIds, ['p1', 'p3']);
@@ -139,17 +140,15 @@ void main() {
     );
   });
 
-  test('직원 간 재배정은 원본 배정과 예상 시각을 제거하고 전체 변경을 함께 확정한다', () {
+  test('직원 간 재배정은 예상 시각을 보존하고 검토 후 전체 변경을 함께 확정한다', () {
     c.setVisitMinute('morning-b', 'p4', 490);
     c.markAbsent('p2');
     c.movePassenger('p4', 'morning-a');
     expect(c.routesForStaff('s1').single.passengerIds, ['p1', 'p3', 'p4']);
     expect(c.routesForStaff('s2').single.passengerIds, ['p5']);
-    expect(
-      c.draft.routes.every((r) => !r.estimatedVisitMinutes.containsKey('p4')),
-      isTrue,
-    );
+    expect(c.draft.routes.first.estimatedVisitMinutes['p4'], 490);
     expect(c.validationErrors, isEmpty);
+    keepReviewedTimes(c);
     c.confirm();
     expect(c.confirmed!.routes.first.passengerIds, ['p1', 'p3', 'p4']);
     expect(c.confirmed!.routes.last.passengerIds, ['p5']);

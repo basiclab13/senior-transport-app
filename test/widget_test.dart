@@ -28,7 +28,13 @@ void main() {
         ),
       ),
     );
-    await tester.tap(find.byKey(const ValueKey('staff-s1')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('dashboard-staff-s1')),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const ValueKey('dashboard-staff-s1')));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const ValueKey('visit-p2')));
     await tester.pumpAndSettle();
@@ -40,6 +46,8 @@ void main() {
     await tester.tap(absent);
     await tester.pumpAndSettle();
     expect(c.draft.routes.first.passengerIds, ['p1', 'p3']);
+    keepReviewedTimes(c);
+    await tester.pumpAndSettle();
     final confirm = find.byKey(const Key('confirm-schedule'));
     await tester.scrollUntilVisible(
       confirm,
@@ -74,8 +82,8 @@ void main() {
         ),
       ),
     );
-    expect(find.text('직원 화면'), findsOneWidget);
-    expect(find.text('아직 확정된 일정이 없습니다.'), findsOneWidget);
+    expect(find.text('내 송영 일정'), findsOneWidget);
+    expect(find.text('아직 확정된 일정이 없습니다. 관리자에게 확인해 주세요.'), findsOneWidget);
     expect(find.byKey(const Key('confirm-schedule')), findsNothing);
     expect(find.text('시연할 직원'), findsNothing);
     await tester.tap(find.byKey(const Key('logout')));

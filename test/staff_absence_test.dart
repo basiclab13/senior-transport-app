@@ -487,12 +487,14 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await openAdminEditor(tester);
   }
 
   testWidgets(
     'admin registers all-day absence, sees list/overview warning and cancels in detail',
     (tester) async {
       await open(tester);
+      await openStaffInfo(tester, 's1');
       await tester.tap(find.byKey(const ValueKey('staff-absence-s1')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('종일'));
@@ -504,15 +506,17 @@ void main() {
       expect(
         find.descendant(
           of: find.byKey(const ValueKey('staff-s1')),
-          matching: find.textContaining('재배정 필요'),
+          matching: find.textContaining('다른 직원 배정 필요'),
         ),
         findsOneWidget,
       );
-      await tester.tap(find.byKey(const Key('open-assignment-overview')));
+      await tester.tap(find.byKey(const Key('admin-overview')));
       await tester.pumpAndSettle();
-      expect(find.text('직원 결근 1명 · 재배정 필요 1코스'), findsOneWidget);
-      await tester.tap(find.byKey(const Key('close-overview')));
+      expect(find.text('해결할 문제'), findsOneWidget);
+      expect(find.textContaining('다른 직원에게 코스를 넘겨주세요.'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('admin-editor')));
       await tester.pumpAndSettle();
+      await openStaffInfo(tester, 's1');
       await tester.tap(find.byKey(const ValueKey('staff-absence-s1')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('종일'));
@@ -543,13 +547,14 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.byKey(const ValueKey('staff-s1')),
+      find.byKey(const ValueKey('dashboard-staff-s1')),
       100,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('staff-s1')));
+    await tester.tap(find.byKey(const ValueKey('dashboard-staff-s1')));
     await tester.pumpAndSettle();
+    await openStaffInfo(tester, 's1');
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey('staff-absence-s1')),
       80,
@@ -589,7 +594,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('staff-absence-warning')), findsOneWidget);
-      expect(find.textContaining('기존 확정 이력'), findsWidgets);
+      expect(find.textContaining('결근으로 등록되어 있습니다'), findsOneWidget);
       expect(find.byKey(const ValueKey('staff-absence-s1')), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());

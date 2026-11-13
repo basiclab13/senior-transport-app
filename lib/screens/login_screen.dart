@@ -31,7 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('다정 송영 관리')),
+    appBar: AppBar(title: const Text('송영도우미')),
     body: Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -49,6 +49,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 12),
                   const Text('관리자가 등록한 계정으로 로그인해 주세요.'),
+                  if (const bool.fromEnvironment('USE_FIREBASE_EMULATORS'))
+                    const Text('테스트 데이터 · 실제 개인정보를 사용하지 않습니다.'),
                   const SizedBox(height: 24),
                   TextFormField(
                     key: const Key('email'),

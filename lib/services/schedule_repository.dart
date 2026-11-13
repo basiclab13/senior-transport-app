@@ -7,6 +7,8 @@ import '../models/schedule_codec.dart';
 import '../models/transport.dart';
 import '../models/staff_absence.dart';
 import 'staff_availability_diagnostics.dart';
+import 'attendance_repository.dart';
+import '../data/emulator_display_names.dart';
 
 class ScheduleViewData {
   const ScheduleViewData(this.catalog, this.confirmed, {this.lastRequestId});
@@ -51,12 +53,47 @@ abstract class StaffAvailabilityRepository {
   );
 }
 
+abstract class ScheduleSuggestionRepository {
+  bool get allowsAiSuggestions;
+  Future<Map<String, dynamic>> suggestSchedule(Map<String, dynamic> request);
+}
+
 class FirebaseScheduleRepository
-    implements ScheduleRepository, StaffAvailabilityRepository {
+    implements
+        ScheduleRepository,
+        StaffAvailabilityRepository,
+        ScheduleSuggestionRepository,
+        AttendanceProvider {
+  @override
+  late final AttendanceRepository attendance = FirebaseAttendanceRepository(
+    firestore,
+  );
   FirebaseScheduleRepository(this.firestore, this.functions);
   final FirebaseFirestore firestore;
   final FirebaseFunctions functions;
   static const _server = GetOptions(source: Source.server);
+
+  @override
+  bool get allowsAiSuggestions =>
+      const bool.fromEnvironment('USE_FIREBASE_EMULATORS') &&
+      firestore.app.options.projectId == 'demo-senior-transport' &&
+      functions.app.options.projectId == 'demo-senior-transport';
+
+  @override
+  Future<Map<String, dynamic>> suggestSchedule(
+    Map<String, dynamic> request,
+  ) async {
+    if (!allowsAiSuggestions) {
+      throw StateError('AI 시연은 Emulator에서만 사용할 수 있습니다.');
+    }
+    final result = await functions
+        .httpsCallable(
+          'suggestSchedule',
+          options: HttpsCallableOptions(timeout: const Duration(seconds: 105)),
+        )
+        .call<Map<String, dynamic>>(request);
+    return Map<String, dynamic>.from(result.data);
+  }
 
   @override
   Stream<Map<String, StaffAbsence>> watchAbsences(AppUser user, DateTime date) {
@@ -233,7 +270,11 @@ class FirebaseScheduleRepository
       throw const FormatException('일정 조회 범위가 일치하지 않습니다.');
     }
     return ScheduleViewData(
-      catalog,
+      emulatorDisplayCatalog(
+        catalog,
+        enabled: const bool.fromEnvironment('USE_FIREBASE_EMULATORS'),
+        projectId: firestore.app.options.projectId,
+      ),
       snapshot,
       lastRequestId: data?['lastRequestId'] as String?,
     );

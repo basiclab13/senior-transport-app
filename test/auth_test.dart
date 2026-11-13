@@ -243,7 +243,7 @@ void main() {
     expect(logs, contains('[auth] authentication failed code=wrong-password'));
     expect(repository.requestedUid, isNull);
     expect(logs.any((line) => line.startsWith('[auth] profile')), isFalse);
-    expect(find.text('관리자 화면'), findsNothing);
+    expect(find.text('송영 현황'), findsNothing);
   });
 
   testWidgets('직원 Authentication 성공 후 staffId 누락을 로그로 구분하고 보정 시 직원 화면을 연다', (
@@ -283,13 +283,13 @@ void main() {
     expect(auth.signedIn, isTrue);
     expect(auth.user, isNull);
     expect(find.textContaining('staffId가 없거나 유효하지'), findsOneWidget);
-    expect(find.text('직원 화면'), findsNothing);
+    expect(find.text('내 송영 일정'), findsNothing);
     repository.profiles.add(
       AppUser.fromDocument('fictional-user', {...document, 'staffId': 's1'}),
     );
     await tester.pumpAndSettle();
     expect(logs, contains('[auth] profile succeeded role=staff'));
-    expect(find.text('직원 화면'), findsOneWidget);
+    expect(find.text('내 송영 일정'), findsOneWidget);
     expect(find.byKey(const Key('confirm-schedule')), findsNothing);
     expect(logs.join('\n'), isNot(contains('staff01@example.com')));
     expect(logs.join('\n'), isNot(contains('fictional-input')));
@@ -312,7 +312,7 @@ void main() {
     expect(logs, contains('[auth] profile failed code=permission-denied'));
     expect(logs.any((line) => line.contains('authentication failed')), isFalse);
     expect(find.textContaining('조회가 거부'), findsOneWidget);
-    expect(find.text('직원 화면'), findsNothing);
+    expect(find.text('내 송영 일정'), findsNothing);
   });
 
   testWidgets('저장된 인증 복원 후 역할 확인, 직원 이동 및 로그아웃', (tester) async {
@@ -322,15 +322,15 @@ void main() {
     repository.sessions.add('fictional-user');
     await tester.pump();
     expect(repository.requestedUid, 'fictional-user');
-    expect(find.text('직원 화면'), findsNothing);
+    expect(find.text('내 송영 일정'), findsNothing);
     repository.profiles.add(staff);
     await tester.pumpAndSettle();
-    expect(find.text('직원 화면'), findsOneWidget);
+    expect(find.text('내 송영 일정'), findsOneWidget);
     expect(find.byKey(const Key('confirm-schedule')), findsNothing);
     await tester.tap(find.byKey(const Key('logout')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('login')), findsOneWidget);
-    expect(find.text('직원 화면'), findsNothing);
+    expect(find.text('내 송영 일정'), findsNothing);
   });
 
   testWidgets('로그인 성공 후 관리자 화면으로 이동한다', (tester) async {
@@ -351,7 +351,7 @@ void main() {
     await tester.pump();
     repository.profiles.add(admin);
     await tester.pumpAndSettle();
-    expect(find.text('관리자 화면'), findsOneWidget);
+    expect(find.text('송영 현황'), findsOneWidget);
     expect(find.byKey(const Key('login')), findsNothing);
     repository.sessions.addError(
       FirebaseAuthException(code: 'network-request-failed'),
@@ -359,7 +359,7 @@ void main() {
     await tester.pumpAndSettle();
     repository.profiles.add(admin);
     await tester.pumpAndSettle();
-    expect(find.text('관리자 화면'), findsNothing);
+    expect(find.text('송영 현황'), findsNothing);
     expect(find.textContaining('네트워크'), findsOneWidget);
   });
 
@@ -371,7 +371,7 @@ void main() {
     await tester.pump();
     repository.profiles.add(admin);
     await tester.pumpAndSettle();
-    expect(find.text('관리자 화면'), findsOneWidget);
+    expect(find.text('송영 현황'), findsOneWidget);
     final confirm = find.byKey(const Key('confirm-schedule'));
     await tester.scrollUntilVisible(
       confirm,
@@ -384,8 +384,8 @@ void main() {
     repository.profiles.add(staff);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('approve-confirm')), findsNothing);
-    expect(find.text('관리자 화면'), findsNothing);
-    expect(find.text('직원 화면'), findsOneWidget);
+    expect(find.text('송영 현황'), findsNothing);
+    expect(find.text('내 송영 일정'), findsOneWidget);
   });
 
   testWidgets('잘못된 역할과 서버 오류는 접근을 차단하고 재시도를 제공한다', (tester) async {
@@ -399,7 +399,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.textContaining('문서가 없습니다'), findsOneWidget);
-    expect(find.text('관리자 화면'), findsNothing);
+    expect(find.text('송영 현황'), findsNothing);
     await tester.tap(find.text('다시 확인'));
     await tester.pump();
     repository.profiles.add(admin);
@@ -409,7 +409,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.textContaining('네트워크'), findsOneWidget);
-    expect(find.text('관리자 화면'), findsNothing);
+    expect(find.text('송영 현황'), findsNothing);
   });
 
   testWidgets('active 누락으로 차단 후 Console 문서 보정 이벤트에서 관리자 화면을 연다', (
@@ -426,7 +426,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.textContaining('active 필드가 없습니다'), findsOneWidget);
-    expect(find.text('관리자 화면'), findsNothing);
+    expect(find.text('송영 현황'), findsNothing);
     repository.profiles.add(
       AppUser.fromDocument('fictional-admin-uid', {
         'email': 'admin@example.com',
@@ -436,7 +436,7 @@ void main() {
       }),
     );
     await tester.pumpAndSettle();
-    expect(find.text('관리자 화면'), findsOneWidget);
+    expect(find.text('송영 현황'), findsOneWidget);
   });
 
   testWidgets('로그아웃 이벤트는 직원의 사진 인증 안내 화면까지 제거한다', (tester) async {
@@ -447,13 +447,10 @@ void main() {
     await tester.pump();
     repository.profiles.add(staff);
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('attendance')));
-    await tester.tap(find.byKey(const Key('attendance')));
-    await tester.pumpAndSettle();
-    expect(find.text('사진 인증 기능 준비 중'), findsOneWidget);
+    expect(find.text('사진 등록은 Emulator 시연 환경에서 사용할 수 있습니다.'), findsOneWidget);
     repository.sessions.add(null);
     await tester.pumpAndSettle();
-    expect(find.text('사진 인증 기능 준비 중'), findsNothing);
+    expect(find.text('사진 등록은 Emulator 시연 환경에서 사용할 수 있습니다.'), findsNothing);
     expect(find.byKey(const Key('login')), findsOneWidget);
   });
 }

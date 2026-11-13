@@ -75,7 +75,7 @@ test('Firestore + Auth + callable Emulator integration, 40 staff / 79 passengers
       }))};
   }
   async function call(data, user = admin) {
-    const response = await fetch(`http://127.0.0.1:5001/${projectId}/asia-northeast3/confirmSchedule`, {
+    const response = await fetch(`http://${process.env.FUNCTIONS_EMULATOR_HOST || '127.0.0.1:5001'}/${projectId}/asia-northeast3/confirmSchedule`, {
       method: 'POST', headers: {'Content-Type': 'application/json', ...(user ? {Authorization: `Bearer ${user.idToken}`} : {})},
       body: JSON.stringify({data}),
     });
@@ -187,7 +187,7 @@ test('Firestore + Auth + callable Emulator integration, 40 staff / 79 passengers
     await t.test('setStaffAbsence callable authorizes admin only and persists date-scoped status', async () => {
       const data = {date:'2026-12-01',staffId:'s1',periods:['morning','afternoon'],absent:true,expectedVersion:0,requestId:randomUUID(),catalogVersion:'scale-v1'};
       async function callAbsence(user) {
-        const response = await fetch(`http://127.0.0.1:5001/${projectId}/asia-northeast3/setStaffAbsence`, {
+        const response = await fetch(`http://${process.env.FUNCTIONS_EMULATOR_HOST || '127.0.0.1:5001'}/${projectId}/asia-northeast3/setStaffAbsence`, {
           method:'POST',headers:{'Content-Type':'application/json',...(user?{Authorization:`Bearer ${user.idToken}`}:{})},body:JSON.stringify({data}),
         });
         return response.json();

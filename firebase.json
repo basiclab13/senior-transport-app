@@ -31,7 +31,9 @@
                       "ignore":  [
                                      "node_modules",
                                      "test",
-                                     "*.log"
+                                     "*.log",
+                                     ".secret.local",
+                                     ".env.local"
                                  ]
                   },
     "hosting": {

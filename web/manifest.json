@@ -1,6 +1,6 @@
 {
-    "name": "다정 송영 관리",
-    "short_name": "다정 송영",
+    "name": "송영도우미",
+    "short_name": "송영도우미",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#F4F7F8",

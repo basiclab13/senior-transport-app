@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
 
+import 'attendance_screen.dart';
+
 import '../models/transport.dart';
+import '../models/visit_time_review.dart';
 import '../services/schedule_controller.dart';
+import '../services/visit_time_calculator.dart';
 import '../widgets/estimated_time_dialog.dart';
 import '../widgets/route_timeline.dart';
 import '../widgets/admin_assignment_overview.dart';
+import '../widgets/admin_transport_dashboard.dart';
 import '../widgets/reassignment_dialog.dart';
 import '../widgets/course_reassignment_dialog.dart';
+import '../widgets/bulk_visit_time_dialog.dart';
 import '../utils/staff_sort.dart';
+import '../utils/schedule_wording.dart';
 
 enum _WorkFilter { all, available, unavailable }
 
@@ -27,6 +34,7 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
   final _search = TextEditingController();
   String? _selectedId;
   bool _mobileDetail = false;
+  bool _overview = true;
   String? _focusedPassengerId;
   String? _focusedRouteId;
   final _focusedRouteKey = GlobalKey();
@@ -54,63 +62,79 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
     children: [
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 4,
+        child: Row(
           children: [
-            OutlinedButton.icon(
-              key: const Key('open-assignment-overview'),
-              onPressed: () => _openOverview(),
-              icon: const Icon(Icons.table_rows_outlined),
-              label: const Text('전체 배정 현황'),
+            TextButton(
+              key: const Key('admin-overview'),
+              onPressed: () => setState(() => _overview = true),
+              child: Text(
+                '전체 현황',
+                style: TextStyle(
+                  fontWeight: _overview ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
             ),
-            OutlinedButton.icon(
-              key: const Key('open-passenger-search'),
-              onPressed: () => _openOverview(passengerSearch: true),
-              icon: const Icon(Icons.person_search_outlined),
-              label: const Text('이용자 찾기'),
+            TextButton(
+              key: const Key('admin-editor'),
+              onPressed: () => setState(() => _overview = false),
+              child: Text(
+                '직원별 일정',
+                style: TextStyle(
+                  fontWeight: !_overview ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
             ),
           ],
         ),
       ),
-      Expanded(
-        child: LayoutBuilder(
-          builder: (context, size) {
-            final wide = size.maxWidth >= 900;
-            final filtered = _filtered;
-            _selectedId ??= filtered.firstOrNull?.id;
-            final selected = filtered.any((staff) => staff.id == _selectedId)
-                ? _selectedId
-                : null;
-            final list = _staffList(filtered);
-            if (wide) {
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+      if (_overview)
+        Expanded(
+          child: AdminTransportDashboard(
+            controller: c,
+            onSelected: _select,
+            onCheckProblems: () => _openOverview(),
+          ),
+        )
+      else ...[
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, size) {
+              final wide = size.maxWidth >= 900;
+              final filtered = _filtered;
+              _selectedId ??= filtered.firstOrNull?.id;
+              final selected = filtered.any((staff) => staff.id == _selectedId)
+                  ? _selectedId
+                  : null;
+              final list = _staffList(filtered);
+              if (wide) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(width: 320, child: list),
+                    const VerticalDivider(width: 1),
+                    Expanded(child: _detail(selected)),
+                  ],
+                );
+              }
+              if (!_mobileDetail || selected == null) return list;
+              return Column(
                 children: [
-                  SizedBox(width: 320, child: list),
-                  const VerticalDivider(width: 1),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      key: const Key('back-to-staff'),
+                      onPressed: () => setState(() => _mobileDetail = false),
+                      icon: const Icon(Icons.arrow_back),
+                      label: const Text('직원 목록으로'),
+                    ),
+                  ),
                   Expanded(child: _detail(selected)),
                 ],
               );
-            }
-            if (!_mobileDetail || selected == null) return list;
-            return Column(
-              children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    key: const Key('back-to-staff'),
-                    onPressed: () => setState(() => _mobileDetail = false),
-                    icon: const Icon(Icons.arrow_back),
-                    label: const Text('직원 목록으로'),
-                  ),
-                ),
-                Expanded(child: _detail(selected)),
-              ],
-            );
-          },
+            },
+          ),
         ),
-      ),
+      ],
     ],
   );
 
@@ -219,7 +243,7 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
                     ? '결근'
                     : available
                     ? '근무 가능'
-                    : '근무 불가'} · ${routes.isEmpty ? '미배정' : '${routes.length}개 코스 배정'}${c.isStaffAbsent(person.id) && routes.isNotEmpty ? ' · 재배정 필요' : ''}',
+                    : '근무 불가'} · ${routes.isEmpty ? '미배정' : '${routes.length}개 코스 배정'}${c.isStaffAbsent(person.id) && routes.isNotEmpty ? ' · 다른 직원 배정 필요' : ''}${routes.any((r) => c.pendingTimeReviewRouteIds.contains(r.baseRouteId)) ? ' · 방문 시간 확인 필요' : ''}',
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => setState(() {
@@ -248,7 +272,12 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
         !c.catalog.staff.any((s) => s.id == selection.staffId)) {
       return;
     }
+    _select(selection);
+  }
+
+  void _select(AdminScheduleSelection selection) {
     setState(() {
+      _overview = false;
       _search.clear();
       _query = '';
       _work = _WorkFilter.all;
@@ -283,15 +312,44 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
               ? '근무 가능'
               : '근무 불가'}',
         ),
-        if (c.supportsAbsences)
-          OutlinedButton.icon(
-            key: ValueKey('staff-absence-$staffId'),
-            onPressed: c.busy ? null : () => _editAbsence(staffId),
-            icon: const Icon(Icons.event_busy),
-            label: const Text('날짜별 결근 등록·취소'),
+        if (c.attendanceRepository?.enabled == true || c.supportsAbsences)
+          ExpansionTile(
+            key: ValueKey('staff-info-$staffId'),
+            tilePadding: EdgeInsets.zero,
+            dense: true,
+            title: const Text('직원 정보 · 결근/사진'),
+            children: [
+              if (c.attendanceRepository?.enabled == true)
+                OutlinedButton.icon(
+                  key: ValueKey('attendance-$staffId'),
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: const Text('업무 시작·종료 기록 보기'),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => AttendanceScreen(
+                        controller: c,
+                        staffId: staff.id,
+                        staffName: staff.name,
+                        date: c.selectedDate,
+                        period: c.period,
+                      ),
+                    ),
+                  ),
+                ),
+              if (c.supportsAbsences)
+                OutlinedButton.icon(
+                  key: ValueKey('staff-absence-$staffId'),
+                  onPressed: c.busy ? null : () => _editAbsence(staffId),
+                  icon: const Icon(Icons.event_busy),
+                  label: const Text('날짜별 결근 등록·취소'),
+                ),
+            ],
           ),
         if (c.isStaffAbsent(staffId) && routes.isNotEmpty)
-          const Text('결근 직원의 코스 · 재배정 필요', style: TextStyle(color: Colors.red)),
+          const Text(
+            '결근 직원의 코스 · 다른 직원 배정 필요',
+            style: TextStyle(color: Colors.red),
+          ),
         const SizedBox(height: 12),
         const Text('방문 시각은 관리자 입력 예상 시간이며 실제 운행 시각과 다를 수 있습니다.'),
         if (routes.isEmpty) ...[
@@ -360,7 +418,7 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
                   ? null
                   : () => _transferCourse(route),
               icon: const Icon(Icons.swap_horiz),
-              label: const Text('코스 전체 재배정'),
+              label: const Text('코스 넘기기'),
             ),
           const SizedBox(height: 16),
           Wrap(
@@ -424,6 +482,46 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
             ),
           ),
           const SizedBox(height: 8),
+          if (c.timeReviews[route.baseRouteId] case final review?) ...[
+            Card(
+              color: review.decision == VisitTimeReviewDecision.pending
+                  ? Theme.of(context).colorScheme.errorContainer
+                  : Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      review.decision.label,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      review.decision == VisitTimeReviewDecision.pending
+                          ? '방문 순서가 바뀌었습니다. 위의 「변경된 방문 시간 맞추기」를 누르거나 기존 시간을 확인해 주세요.'
+                          : '방문 시간 확인을 마쳤습니다. 다른 변경사항을 확인한 후 최종 확정해 주세요.',
+                    ),
+                    if (review.decision == VisitTimeReviewDecision.pending)
+                      TextButton(
+                        key: ValueKey('keep-times-${route.baseRouteId}'),
+                        onPressed: () => _keepTimes(route),
+                        child: const Text('기존 시간 그대로 쓰기'),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          OutlinedButton.icon(
+            key: ValueKey('bulk-time-${route.baseRouteId}'),
+            onPressed: () => _bulkTimes(route),
+            icon: const Icon(Icons.auto_awesome_outlined),
+            label: Text(
+              c.pendingTimeReviewRouteIds.contains(route.baseRouteId)
+                  ? '방문 시간 다시 맞추기'
+                  : '방문 시간 맞추기',
+            ),
+          ),
           Text(
             '기본 방문 순서: ${c.baseRoute(route.baseRouteId).passengerIds.map((id) => c.passenger(id).name).join(' → ')}',
             style: const TextStyle(color: Colors.black54),
@@ -526,7 +624,7 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${c.staff(route.staffId).name} → ${c.staff(target).name} · 재배정 초안 반영. 전체 직원 변경 검토·확정이 필요합니다.',
+            '${c.staff(route.staffId).name} → ${c.staff(target).name} · 담당 직원 변경 완료. 전체 직원 변경 검토·확정이 필요합니다.',
           ),
         ),
       );
@@ -567,6 +665,102 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
       return;
     }
     c.movePassenger(passengerId, target);
+  }
+
+  Future<void> _keepTimes(RouteAssignment route) async {
+    final snapshot = c.draft;
+    final revision = c.absenceRevisionKey;
+    final warnings = visitTimeWarnings(route, route.estimatedVisitMinutes);
+    final missing = route.passengerIds
+        .where((id) => !route.estimatedVisitMinutes.containsKey(id))
+        .length;
+    final approved = await showDialog<bool>(
+      context: context,
+      useRootNavigator: false,
+      builder: (context) => AlertDialog(
+        title: const Text('기존 방문 시간 확인'),
+        content: SizedBox(
+          width: 480,
+          height: 300,
+          child: ListView(
+            children: [
+              Text(
+                '${dateKey(snapshot.date)} · ${snapshot.period.label} · ${c.baseRoute(route.baseRouteId).name}',
+              ),
+              const Text('변경된 방문 순서의 기존 시각을 확인해 주세요. 실제 운행 시각이 아닌 예상 시각입니다.'),
+              for (final id in route.passengerIds)
+                Text(
+                  '${c.passenger(id).name} · ${minuteLabel(route.estimatedVisitMinutes[id])}',
+                ),
+              if (missing > 0) Text('예상 시각 미입력 $missing명: 유지하면 미입력 상태로 남습니다.'),
+              if (route.passengerIds.isEmpty) const Text('방문 이용자가 없는 코스입니다.'),
+              for (final warning in warnings)
+                Text(easyScheduleMessage(warning)),
+              if (warnings.isNotEmpty) const Text('방문 시간을 다시 맞춘 뒤 확인해 주세요.'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            key: const Key('approve-keep-times'),
+            onPressed: warnings.isEmpty
+                ? () => Navigator.pop(context, true)
+                : null,
+            child: const Text('검토 완료 · 기존 시간 그대로 쓰기'),
+          ),
+        ],
+      ),
+    );
+    if (approved != true || !mounted) return;
+    try {
+      if (revision != c.absenceRevisionKey) {
+        throw StateError('결근 상태가 변경되었습니다. 다시 검토해 주세요.');
+      }
+      c.keepVisitTimes(route.baseRouteId, expectedSnapshot: snapshot);
+    } on StateError catch (error) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    }
+  }
+
+  Future<void> _bulkTimes(RouteAssignment route) async {
+    final snapshot = c.draft;
+    final catalog = c.catalog;
+    final revision = c.absenceRevisionKey;
+    final result = await showDialog<VisitTimeApplication>(
+      context: context,
+      useRootNavigator: false,
+      builder: (_) => BulkVisitTimeDialog(
+        catalog: catalog,
+        snapshot: snapshot,
+        routeId: route.baseRouteId,
+      ),
+    );
+    if (result == null || !mounted) return;
+    if (c.busy ||
+        c.loading ||
+        c.dataError != null ||
+        c.availabilityLoading ||
+        c.availabilityError != null ||
+        c.conflict ||
+        !identical(snapshot, c.draft) ||
+        !identical(catalog, c.catalog) ||
+        revision != c.absenceRevisionKey) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('일정 또는 결근 상태가 변경되었습니다. 최신 방문 순서로 다시 계산해 주세요.'),
+        ),
+      );
+      return;
+    }
+    c.applyVisitTimePreview(
+      result.preview,
+      manualOverwriteConfirmed: result.manualOverwriteConfirmed,
+    );
   }
 
   Future<void> _editTime(RouteAssignment route, {String? passengerId}) async {
@@ -632,7 +826,7 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
               ),
               const SizedBox(height: 12),
               const Text(
-                '선택한 날짜에만 적용됩니다. 담당 코스가 남으면 재배정 필요로 표시되며, 일정은 자동으로 수정·확정되지 않습니다.',
+                '선택한 날짜에만 적용됩니다. 담당 코스가 남으면 다른 직원 배정 필요로 표시되며, 일정은 자동으로 수정·확정되지 않습니다.',
               ),
             ],
           ),

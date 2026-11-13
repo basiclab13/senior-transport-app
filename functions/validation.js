@@ -1,14 +1,21 @@
 "use strict";
 const { HttpsError } = require("firebase-functions/v2/https");
 const idPattern = /^[A-Za-z0-9_-]{1,80}$/;
-function reject(message) { throw new HttpsError("invalid-argument", message); }
+const violationTypes=new Set(['INVALID_INPUT','UNSUPPORTED_FIELDS','ID_LIST_INVALID','ID_DUPLICATE',
+  'PASSENGER_DUPLICATE','REMOVED_STATUS_INVALID','ROUTE_UNKNOWN','ROUTE_DUPLICATE','ROUTE_MISSING',
+  'STAFF_UNAVAILABLE','STAFF_DUPLICATE','STAFF_ABSENT','VEHICLE_DUPLICATE','VEHICLE_INVALID','VEHICLE_CAPACITY_EXCEEDED',
+  'ESTIMATE_REFERENCE_INVALID','ESTIMATE_SOURCE_INVALID','OPERATING_WINDOW_INVALID','VISIT_TIME_CONFLICT',
+  'PASSENGER_UNKNOWN','REMOVED_PASSENGER_ASSIGNED','PASSENGER_MISSING',
+  'RESPONSE_FORMAT_INVALID','RESPONSE_FIELDS_FORBIDDEN','REASONS_INVALID','ROUTE_COUNT_MISMATCH','REASSIGNMENT_NOT_JUSTIFIED']);
+function safeViolation(error) {return violationTypes.has(error?.details?.violation)?error.details.violation:undefined;}
+function reject(message,violation='INVALID_INPUT') { throw new HttpsError("invalid-argument", message,{violation}); }
 function keys(value, allowed) {
   if (!value || typeof value !== "object" || Array.isArray(value) ||
-      Object.keys(value).some((key) => !allowed.includes(key))) reject("지원하지 않는 데이터 필드입니다.");
+      Object.keys(value).some((key) => !allowed.includes(key))) reject("지원하지 않는 데이터 필드입니다.",'UNSUPPORTED_FIELDS');
 }
-function ids(value) {
-  if (!Array.isArray(value) || value.some((id) => typeof id !== "string" || !idPattern.test(id)) ||
-      new Set(value).size !== value.length) reject("ID 목록에 잘못된 값 또는 중복이 있습니다.");
+function ids(value,duplicateViolation='ID_DUPLICATE') {
+  if (!Array.isArray(value) || value.some((id) => typeof id !== "string" || !idPattern.test(id))) reject("ID 목록에 잘못된 값 또는 중복이 있습니다.",'ID_LIST_INVALID');
+  if(new Set(value).size !== value.length) reject("ID 목록에 잘못된 값 또는 중복이 있습니다.",duplicateViolation);
 }
 function validateRequest(data) {
   keys(data, ["date", "period", "catalogVersion", "expectedVersion", "requestId", "routes", "absentIds", "excludedIds", "expectedAvailabilityVersions"]);
@@ -33,39 +40,47 @@ function validateSchedule(data, catalog) {
   const expected = baseRoutes.filter((route) => route.period === data.period);
   const expectedIds = new Set(expected.flatMap((route) => route.passengerIds));
   const removed = [...data.absentIds, ...data.excludedIds];
-  if (new Set(removed).size !== removed.length || removed.some((id) => !expectedIds.has(id))) reject("결석·제외 상태를 확인해 주세요.");
+  if (new Set(removed).size !== removed.length || removed.some((id) => !expectedIds.has(id))) reject("결석·제외 상태를 확인해 주세요.",'REMOVED_STATUS_INVALID');
   const usedStaff = new Set(), usedVehicles = new Set(), usedPassengers = new Set(), usedRoutes = new Set();
   const weekday = new Date(`${data.date}T00:00:00Z`).getUTCDay() || 7;
   const validMinute = (value) => Number.isInteger(value) && value >= 0 && value < 1440;
   for (const route of data.routes) {
-    keys(route, ["baseRouteId", "staffId", "vehicleId", "passengerIds", "estimatedVisitMinutes", "startMinute", "endMinute"]);
+    keys(route, ["baseRouteId", "staffId", "vehicleId", "passengerIds", "estimatedVisitMinutes", "estimatedVisitSources", "startMinute", "endMinute"]);
     const base = expected.find((item) => item.id === route.baseRouteId);
-    if (!base || usedRoutes.has(route.baseRouteId)) reject("기본 코스 누락·중복 또는 다른 시간대 코스입니다.");
+    if (!base) reject("기본 코스 누락·중복 또는 다른 시간대 코스입니다.",'ROUTE_UNKNOWN');
+    if (usedRoutes.has(route.baseRouteId)) reject("기본 코스 누락·중복 또는 다른 시간대 코스입니다.",'ROUTE_DUPLICATE');
     usedRoutes.add(route.baseRouteId);
     const person = staff.find((item) => item.id === route.staffId && item.active === true);
     const vehicle = vehicles.find((item) => item.id === route.vehicleId);
-    if (!person || (person.unavailableWeekdays || []).includes(weekday)) reject("근무할 수 없는 직원입니다.");
-    if (usedStaff.has(route.staffId) || usedVehicles.has(route.vehicleId)) reject("직원 또는 차량이 같은 시간대에 중복 배정되었습니다.");
+    if (!person || (person.unavailableWeekdays || []).includes(weekday)) reject("근무할 수 없는 직원입니다.",'STAFF_UNAVAILABLE');
+    if (usedStaff.has(route.staffId)) reject("직원 또는 차량이 같은 시간대에 중복 배정되었습니다.",'STAFF_DUPLICATE');
+    if (usedVehicles.has(route.vehicleId)) reject("직원 또는 차량이 같은 시간대에 중복 배정되었습니다.",'VEHICLE_DUPLICATE');
     usedStaff.add(route.staffId); usedVehicles.add(route.vehicleId);
-    ids(route.passengerIds);
-    if (!vehicle || !Number.isInteger(vehicle.passengerCapacity) || route.passengerIds.length > vehicle.passengerCapacity) reject("차량 참조 또는 정원을 확인해 주세요.");
+    ids(route.passengerIds,'PASSENGER_DUPLICATE');
+    if (!vehicle || !Number.isInteger(vehicle.passengerCapacity)) reject("차량 참조 또는 정원을 확인해 주세요.",'VEHICLE_INVALID');
+    if (route.passengerIds.length > vehicle.passengerCapacity) reject("차량 참조 또는 정원을 확인해 주세요.",'VEHICLE_CAPACITY_EXCEEDED');
     const times = route.estimatedVisitMinutes;
     if (!times || typeof times !== "object" || Array.isArray(times) ||
-        Object.keys(times).some((id) => !route.passengerIds.includes(id))) reject("예상 방문 시각의 이용자 참조를 확인해 주세요.");
+        Object.keys(times).some((id) => !route.passengerIds.includes(id))) reject("예상 방문 시각의 이용자 참조를 확인해 주세요.",'ESTIMATE_REFERENCE_INVALID');
+    const sources=route.estimatedVisitSources;
+    if(sources!==undefined&&(!sources||typeof sources!=='object'||Array.isArray(sources)||Object.entries(sources).some(([id,source])=>!Object.hasOwn(times,id)||!['manual','fixedInterval'].includes(source))))reject('예상 시각 출처의 형식과 이용자 참조를 확인해 주세요.','ESTIMATE_SOURCE_INVALID');
     const start = route.startMinute, end = route.endMinute;
     if ((start == null) !== (end == null) || (start != null &&
-        (!validMinute(start) || !validMinute(end) || start >= end))) reject("예상 운행 시작·종료 시각을 확인해 주세요.");
+        (!validMinute(start) || !validMinute(end) || start >= end))) reject("예상 운행 시작·종료 시각을 확인해 주세요.",'OPERATING_WINDOW_INVALID');
     let previous = -1;
     for (const id of route.passengerIds) {
-      if (!expectedIds.has(id) || !passengers.some((p) => p.id === id) || usedPassengers.has(id) || removed.includes(id)) reject("이용자 중복·참조·결석 배정을 확인해 주세요.");
+      if (!expectedIds.has(id) || !passengers.some((p) => p.id === id)) reject("이용자 중복·참조·결석 배정을 확인해 주세요.",'PASSENGER_UNKNOWN');
+      if (usedPassengers.has(id)) reject("이용자 중복·참조·결석 배정을 확인해 주세요.",'PASSENGER_DUPLICATE');
+      if (removed.includes(id)) reject("이용자 중복·참조·결석 배정을 확인해 주세요.",'REMOVED_PASSENGER_ASSIGNED');
       usedPassengers.add(id);
       if (Object.hasOwn(times, id)) {
         const minute = times[id];
-        if (!validMinute(minute) || minute <= previous || (start != null && (minute < start || minute > end))) reject("예상 시각이 방문 순서 또는 운행 범위와 충돌합니다.");
+        if (!validMinute(minute) || minute <= previous || (start != null && (minute < start || minute > end))) reject("예상 시각이 방문 순서 또는 운행 범위와 충돌합니다.",'VISIT_TIME_CONFLICT');
         previous = minute;
       }
     }
   }
-  if (usedRoutes.size !== expected.length || usedPassengers.size !== expectedIds.size - removed.length) reject("기본 코스 또는 송영 대상 이용자가 누락되었습니다.");
+  if (usedRoutes.size !== expected.length) reject("기본 코스 또는 송영 대상 이용자가 누락되었습니다.",'ROUTE_MISSING');
+  if (usedPassengers.size !== expectedIds.size - removed.length) reject("기본 코스 또는 송영 대상 이용자가 누락되었습니다.",'PASSENGER_MISSING');
 }
-module.exports = { validateRequest, validateSchedule, idPattern };
+module.exports = { validateRequest, validateSchedule, idPattern, safeViolation };

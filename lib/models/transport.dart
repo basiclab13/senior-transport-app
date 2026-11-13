@@ -71,18 +71,24 @@ class RouteAssignment {
     required this.vehicleId,
     required List<String> passengerIds,
     Map<String, int> estimatedVisitMinutes = const {},
+    Map<String, String> estimatedVisitSources = const {},
     this.startMinute,
     this.endMinute,
   }) : passengerIds = List.unmodifiable(passengerIds),
-       estimatedVisitMinutes = Map.unmodifiable(estimatedVisitMinutes);
+       estimatedVisitMinutes = Map.unmodifiable(estimatedVisitMinutes),
+       estimatedVisitSources = Map.unmodifiable(estimatedVisitSources);
 
   final String baseRouteId;
   final String staffId;
   final String vehicleId;
   final List<String> passengerIds;
 
-  // Manually entered local wall-clock minutes for this date, never GPS times.
+  // Expected local wall-clock minutes for this date, never GPS observations.
   final Map<String, int> estimatedVisitMinutes;
+  final Map<String, String> estimatedVisitSources;
+  bool isManualEstimate(String passengerId) =>
+      estimatedVisitMinutes.containsKey(passengerId) &&
+      estimatedVisitSources[passengerId] != 'fixedInterval';
   final int? startMinute;
   final int? endMinute;
 
@@ -91,6 +97,7 @@ class RouteAssignment {
     String? vehicleId,
     List<String>? passengerIds,
     Map<String, int>? estimatedVisitMinutes,
+    Map<String, String>? estimatedVisitSources,
     int? startMinute,
     int? endMinute,
     bool clearOperatingWindow = false,
@@ -100,6 +107,7 @@ class RouteAssignment {
     vehicleId: vehicleId ?? this.vehicleId,
     passengerIds: passengerIds ?? this.passengerIds,
     estimatedVisitMinutes: estimatedVisitMinutes ?? this.estimatedVisitMinutes,
+    estimatedVisitSources: estimatedVisitSources ?? this.estimatedVisitSources,
     startMinute: clearOperatingWindow ? null : startMinute ?? this.startMinute,
     endMinute: clearOperatingWindow ? null : endMinute ?? this.endMinute,
   );

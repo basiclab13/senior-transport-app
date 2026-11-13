@@ -35,6 +35,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(c.catalog.staff.length, 40);
+      await openAdminEditor(tester);
       expect(c.catalog.passengers.length, 79);
       await tester.enterText(find.byKey(const Key('staff-search')), '가상 직원 40');
       await tester.pumpAndSettle();
@@ -57,6 +58,7 @@ void main() {
       await tester.pumpAndSettle();
       c.movePassenger('p78', 'morning-a');
       c.setVisitMinute('morning-a', 'p78', 520);
+      keepReviewedTimes(c);
       await tester.pumpAndSettle();
       expect(c.routesForStaff('s40').single.passengerIds, ['p79']);
       expect(c.validationErrors, isEmpty);
