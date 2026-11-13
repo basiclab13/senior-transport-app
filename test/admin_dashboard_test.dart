@@ -92,6 +92,193 @@ void main() {
     });
   }
 
+  Future<void> openCourse(WidgetTester tester, Size size) async {
+    await open(tester, size: size);
+    await tester.tap(find.byKey(const Key('admin-editor')));
+    await tester.pumpAndSettle();
+    if (size.width < 900) {
+      final row = find.byKey(const ValueKey('staff-s1'));
+      await tester.scrollUntilVisible(
+        row,
+        100,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const Key('staff-list')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+    }
+  }
+
+  for (final size in [
+    const Size(320, 568),
+    const Size(390, 844),
+    const Size(1280, 900),
+  ]) {
+    testWidgets(
+      '${size.width}px course defaults to readonly assignment and folded operating settings',
+      (tester) async {
+        await openCourse(tester, size);
+        final assigned = find.byKey(const ValueKey('assigned-staff-morning-1'));
+        if (assigned.evaluate().isEmpty) {
+          await tester.scrollUntilVisible(
+            assigned,
+            100,
+            scrollable: find
+                .descendant(
+                  of: find.byKey(const ValueKey('staff-detail-s1')),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+          );
+          await tester.pumpAndSettle();
+        }
+        expect(find.text('담당 직원 · 가상 직원 01'), findsOneWidget);
+        expect(find.text('담당 차량 · 가상 차량 1'), findsOneWidget);
+        expect(find.byKey(const ValueKey('morning-1-staff-s1')), findsNothing);
+        expect(
+          find.byKey(const ValueKey('morning-1-vehicle-v1')),
+          findsNothing,
+        );
+        expect(find.byKey(const ValueKey('operating-morning-1')), findsNothing);
+        expect(find.text('방문 순서 · 예상 방문 시각'), findsOneWidget);
+        await screenshot(tester, 'course-detail-${size.width.toInt()}');
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+  testWidgets(
+    'explicit employee selection keeps the old vehicle and existing duplicate validation',
+    (tester) async {
+      await openCourse(tester, const Size(1280, 900));
+      final change = find.byKey(const ValueKey('edit-assignment-morning-1'));
+      await tester.ensureVisible(change);
+      await tester.tap(change);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('morning-1-staff-s1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('가상 직원 02').last);
+      await tester.pumpAndSettle();
+      final route = c.draft.routes.firstWhere(
+        (r) => r.baseRouteId == 'morning-1',
+      );
+      expect(route.staffId, 's2');
+      expect(route.vehicleId, 'v1');
+      expect(
+        c.validationErrors.any((error) => error.contains('직원이 같은 시간대')),
+        isTrue,
+      );
+      expect(c.confirmed, isNull);
+    },
+  );
+  testWidgets(
+    'additional settings preserve and edit the operating window without changing visit times',
+    (tester) async {
+      c.setOperatingWindow('morning-1', 480, 540);
+      c.setVisitMinute('morning-1', 'p1', 490);
+      await openCourse(tester, const Size(390, 844));
+      expect(find.byKey(const ValueKey('operating-morning-1')), findsNothing);
+      final settings = find.text('추가 설정');
+      await tester.ensureVisible(settings);
+      await tester.pumpAndSettle();
+      await tester.tap(settings);
+      await tester.pumpAndSettle();
+      final operating = find.byKey(const ValueKey('operating-morning-1'));
+      await tester.ensureVisible(operating);
+      await tester.pumpAndSettle();
+      await tester.tap(operating);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextFormField>(
+              find.byKey(const ValueKey('estimated-time-0')),
+            )
+            .controller!
+            .text,
+        '08:00',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('estimated-time-1')),
+        '09:30',
+      );
+      await tester.tap(find.byKey(const Key('save-estimated-time')));
+      await tester.pumpAndSettle();
+      expect(c.draft.routes.first.endMinute, 570);
+      expect(c.draft.routes.first.estimatedVisitMinutes['p1'], 490);
+      expect(c.confirmed, isNull);
+    },
+  );
+  testWidgets(
+    'capacity warning opens vehicle selection and still blocks final confirmation',
+    (tester) async {
+      c.movePassenger('p1', 'morning-2');
+      c.movePassenger('p2', 'morning-2');
+      c.movePassenger('p3', 'morning-2');
+      await open(tester);
+      await tester.tap(find.byKey(const Key('admin-editor')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('staff-s2')));
+      await tester.pumpAndSettle();
+      final fix = find.byKey(const ValueKey('fix-assignment-morning-2'));
+      await tester.ensureVisible(fix);
+      await tester.tap(fix);
+      await tester.pumpAndSettle();
+      final vehicles = find.byKey(const ValueKey('morning-2-vehicle-v2'));
+      expect(vehicles, findsOneWidget);
+      await tester.ensureVisible(vehicles);
+      await tester.tap(vehicles);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('가상 차량 1 (6명)').last);
+      await tester.pumpAndSettle();
+      expect(
+        c.draft.routes
+            .firstWhere((r) => r.baseRouteId == 'morning-2')
+            .vehicleId,
+        'v1',
+      );
+      expect(c.validationErrors.any((e) => e.contains('정원')), isTrue);
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(const Key('confirm-schedule')))
+            .onPressed,
+        isNull,
+      );
+    },
+  );
+  testWidgets(
+    'operating error opens its editor directly without requiring additional settings',
+    (tester) async {
+      c.setOperatingWindow('morning-1', 600, 500);
+      await openCourse(tester, const Size(390, 844));
+      final fix = find.byKey(const ValueKey('fix-operating-morning-1'));
+      await tester.ensureVisible(fix);
+      await tester.tap(fix);
+      await tester.pumpAndSettle();
+      expect(find.text('예상 운행 시간 수정'), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const ValueKey('estimated-time-0')),
+        '08:00',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('estimated-time-1')),
+        '09:30',
+      );
+      await tester.tap(find.byKey(const Key('save-estimated-time')));
+      await tester.pumpAndSettle();
+      expect(c.draft.routes.first.startMinute, 480);
+      expect(c.draft.routes.first.endMinute, 570);
+      expect(
+        find.byKey(const ValueKey('fix-operating-morning-1')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'default PC home summarizes 20 staff / 80 passengers and leaves editing closed',
     (tester) async {

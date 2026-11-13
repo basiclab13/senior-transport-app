@@ -26,6 +26,7 @@
                       "rules":  "firestore.rules"
                   },
     "functions":  {
+                      "predeploy": ["node tools/verify-functions-build.cjs"],
                       "runtime":  "nodejs22",
                       "source":  "functions",
                       "ignore":  [

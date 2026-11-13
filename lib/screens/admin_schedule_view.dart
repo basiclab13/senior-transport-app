@@ -38,6 +38,9 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
   String? _focusedPassengerId;
   String? _focusedRouteId;
   final _focusedRouteKey = GlobalKey();
+  final _assignmentEditors = <String>{};
+  String _editorScope(String routeId) =>
+      '${dateKey(c.selectedDate)}_${c.period.name}_$routeId';
   _WorkFilter _work = _WorkFilter.all;
   _AssignmentFilter _assignment = _AssignmentFilter.all;
 
@@ -396,196 +399,269 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
     );
   }
 
-  Widget _routeEditor(RouteAssignment route) => Card(
-    key: _focusedRouteId == route.baseRouteId ? _focusedRouteKey : null,
-    margin: const EdgeInsets.only(top: 16),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            c.baseRoute(route.baseRouteId).name,
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          Text(
-            '이용자 ${route.passengerIds.length}/${c.vehicle(route.vehicleId).passengerCapacity}명',
-          ),
-          if (c.isStaffAbsent(route.staffId))
-            FilledButton.icon(
-              key: ValueKey('transfer-course-${route.baseRouteId}'),
-              onPressed: c.busy || c.conflict
-                  ? null
-                  : () => _transferCourse(route),
-              icon: const Icon(Icons.swap_horiz),
-              label: const Text('코스 넘기기'),
+  Widget _routeEditor(RouteAssignment route) {
+    final scope = _editorScope(route.baseRouteId);
+    final editing = _assignmentEditors.contains(scope);
+    final capacityExceeded =
+        route.passengerIds.length >
+        c.vehicle(route.vehicleId).passengerCapacity;
+    final assignmentConflict =
+        !c.staffAvailable(c.staff(route.staffId)) ||
+        c.draft.routes.any(
+          (r) =>
+              r.baseRouteId != route.baseRouteId &&
+              (r.staffId == route.staffId || r.vehicleId == route.vehicleId),
+        );
+    final operatingWarning = visitTimeWarnings(
+      route,
+      route.estimatedVisitMinutes,
+    ).any((warning) => warning.contains('운행'));
+    return Card(
+      key: _focusedRouteId == route.baseRouteId ? _focusedRouteKey : null,
+      margin: const EdgeInsets.only(top: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              c.baseRoute(route.baseRouteId).name,
+              style: Theme.of(context).textTheme.titleLarge,
             ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              SizedBox(
-                width: 230,
-                child: DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  key: ValueKey('${route.baseRouteId}-staff-${route.staffId}'),
-                  initialValue: route.staffId,
-                  decoration: const InputDecoration(labelText: '담당 직원'),
-                  items: [
-                    for (final staff
-                        in (c.catalog.staff.toList()..sort(compareStaffNames)))
-                      DropdownMenuItem(
-                        value: staff.id,
-                        child: Text(
-                          '${staff.name}${c.staffAvailable(staff) ? '' : ' (근무 불가)'}',
-                        ),
-                      ),
-                  ],
-                  onChanged: (id) {
-                    if (id != null) c.assign(route.baseRouteId, staffId: id);
-                  },
+            Text(
+              '이용자 ${route.passengerIds.length}/${c.vehicle(route.vehicleId).passengerCapacity}명',
+            ),
+            Text(
+              '담당 직원 · ${c.staff(route.staffId).name}',
+              key: ValueKey('assigned-staff-${route.baseRouteId}'),
+            ),
+            Text(
+              '담당 차량 · ${c.vehicle(route.vehicleId).name}',
+              key: ValueKey('assigned-vehicle-${route.baseRouteId}'),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: ValueKey('edit-assignment-${route.baseRouteId}'),
+                onPressed: () => setState(
+                  () => editing
+                      ? _assignmentEditors.remove(scope)
+                      : _assignmentEditors.add(scope),
+                ),
+                icon: Icon(editing ? Icons.close : Icons.edit_outlined),
+                label: Text(editing ? '변경 닫기' : '담당 직원·차량 변경'),
+              ),
+            ),
+            if (capacityExceeded || assignmentConflict)
+              TextButton.icon(
+                key: ValueKey('fix-assignment-${route.baseRouteId}'),
+                onPressed: () => setState(() => _assignmentEditors.add(scope)),
+                icon: const Icon(Icons.warning_amber),
+                label: Text(
+                  capacityExceeded ? '정원 초과 · 차량 변경하기' : '직원·차량 배정 확인하기',
                 ),
               ),
-              SizedBox(
-                width: 230,
-                child: DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  key: ValueKey(
-                    '${route.baseRouteId}-vehicle-${route.vehicleId}',
-                  ),
-                  initialValue: route.vehicleId,
-                  decoration: const InputDecoration(labelText: '담당 차량'),
-                  items: [
-                    for (final vehicle in c.catalog.vehicles)
-                      DropdownMenuItem(
-                        value: vehicle.id,
-                        child: Text(
-                          '${vehicle.name} (${vehicle.passengerCapacity}명)',
-                        ),
+            if (operatingWarning)
+              TextButton.icon(
+                key: ValueKey('fix-operating-${route.baseRouteId}'),
+                onPressed: () => _editTime(route),
+                icon: const Icon(Icons.warning_amber),
+                label: const Text('운행 시간 범위 확인·수정'),
+              ),
+            if (c.isStaffAbsent(route.staffId))
+              FilledButton.icon(
+                key: ValueKey('transfer-course-${route.baseRouteId}'),
+                onPressed: c.busy || c.conflict
+                    ? null
+                    : () => _transferCourse(route),
+                icon: const Icon(Icons.swap_horiz),
+                label: const Text('코스 넘기기'),
+              ),
+            if (editing)
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  SizedBox(
+                    width: 230,
+                    child: DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      key: ValueKey(
+                        '${route.baseRouteId}-staff-${route.staffId}',
                       ),
-                  ],
-                  onChanged: (id) {
-                    if (id != null) c.assign(route.baseRouteId, vehicleId: id);
-                  },
+                      initialValue: route.staffId,
+                      decoration: const InputDecoration(labelText: '담당 직원'),
+                      items: [
+                        for (final staff
+                            in (c.catalog.staff.toList()
+                              ..sort(compareStaffNames)))
+                          DropdownMenuItem(
+                            value: staff.id,
+                            child: Text(
+                              '${staff.name}${c.staffAvailable(staff) ? '' : ' (근무 불가)'}',
+                            ),
+                          ),
+                      ],
+                      onChanged: (id) {
+                        if (id != null) {
+                          c.assign(route.baseRouteId, staffId: id);
+                        }
+                      },
+                    ),
+                  ),
+                  SizedBox(
+                    width: 230,
+                    child: DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      key: ValueKey(
+                        '${route.baseRouteId}-vehicle-${route.vehicleId}',
+                      ),
+                      initialValue: route.vehicleId,
+                      decoration: const InputDecoration(labelText: '담당 차량'),
+                      items: [
+                        for (final vehicle in c.catalog.vehicles)
+                          DropdownMenuItem(
+                            value: vehicle.id,
+                            child: Text(
+                              '${vehicle.name} (${vehicle.passengerCapacity}명)',
+                            ),
+                          ),
+                      ],
+                      onChanged: (id) {
+                        if (id != null) {
+                          c.assign(route.baseRouteId, vehicleId: id);
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            const SizedBox(height: 8),
+            if (c.timeReviews[route.baseRouteId] case final review?) ...[
+              Card(
+                color: review.decision == VisitTimeReviewDecision.pending
+                    ? Theme.of(context).colorScheme.errorContainer
+                    : Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        review.decision.label,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        review.decision == VisitTimeReviewDecision.pending
+                            ? '방문 순서가 바뀌었습니다. 위의 「변경된 방문 시간 맞추기」를 누르거나 기존 시간을 확인해 주세요.'
+                            : '방문 시간 확인을 마쳤습니다. 다른 변경사항을 확인한 후 최종 확정해 주세요.',
+                      ),
+                      if (review.decision == VisitTimeReviewDecision.pending)
+                        TextButton(
+                          key: ValueKey('keep-times-${route.baseRouteId}'),
+                          onPressed: () => _keepTimes(route),
+                          child: const Text('기존 시간 그대로 쓰기'),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            key: ValueKey('operating-${route.baseRouteId}'),
-            onPressed: () => _editTime(route),
-            icon: const Icon(Icons.schedule),
-            label: Text(
-              '예상 운행 ${minuteLabel(route.startMinute)}–${minuteLabel(route.endMinute)}',
+            const Divider(height: 16),
+            const Text(
+              '방문 순서 · 예상 방문 시각',
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
-          ),
-          const SizedBox(height: 8),
-          if (c.timeReviews[route.baseRouteId] case final review?) ...[
-            Card(
-              color: review.decision == VisitTimeReviewDecision.pending
-                  ? Theme.of(context).colorScheme.errorContainer
-                  : Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      review.decision.label,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      review.decision == VisitTimeReviewDecision.pending
-                          ? '방문 순서가 바뀌었습니다. 위의 「변경된 방문 시간 맞추기」를 누르거나 기존 시간을 확인해 주세요.'
-                          : '방문 시간 확인을 마쳤습니다. 다른 변경사항을 확인한 후 최종 확정해 주세요.',
-                    ),
-                    if (review.decision == VisitTimeReviewDecision.pending)
-                      TextButton(
-                        key: ValueKey('keep-times-${route.baseRouteId}'),
-                        onPressed: () => _keepTimes(route),
-                        child: const Text('기존 시간 그대로 쓰기'),
-                      ),
-                  ],
-                ),
+            RouteTimeline(
+              controller: c,
+              route: route,
+              compact: true,
+              focusedPassengerId: _focusedPassengerId,
+              actionsBuilder: (id, index) => Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 4,
+                children: [
+                  TextButton.icon(
+                    key: ValueKey('time-$id'),
+                    onPressed: () => _editTime(route, passengerId: id),
+                    icon: const Icon(Icons.schedule, size: 18),
+                    label: const Text('시각 수정'),
+                  ),
+                  IconButton(
+                    key: ValueKey('up-$id'),
+                    tooltip: '방문 순서 위로',
+                    onPressed: index == 0
+                        ? null
+                        : () => c.reorder(route.baseRouteId, index, -1),
+                    icon: const Icon(Icons.arrow_upward),
+                  ),
+                  IconButton(
+                    key: ValueKey('down-$id'),
+                    tooltip: '방문 순서 아래로',
+                    onPressed: index == route.passengerIds.length - 1
+                        ? null
+                        : () => c.reorder(route.baseRouteId, index, 1),
+                    icon: const Icon(Icons.arrow_downward),
+                  ),
+                  TextButton(
+                    key: ValueKey('move-$id'),
+                    onPressed: () => _reassign(route, id),
+                    child: const Text('재배정 →'),
+                  ),
+                  TextButton(
+                    key: ValueKey('exclude-$id'),
+                    onPressed: () => c.excludePassenger(id),
+                    child: const Text('제외'),
+                  ),
+                  TextButton(
+                    key: ValueKey('absent-$id'),
+                    onPressed: () => c.markAbsent(id),
+                    child: const Text('결석'),
+                  ),
+                ],
               ),
             ),
-          ],
-          OutlinedButton.icon(
-            key: ValueKey('bulk-time-${route.baseRouteId}'),
-            onPressed: () => _bulkTimes(route),
-            icon: const Icon(Icons.auto_awesome_outlined),
-            label: Text(
-              c.pendingTimeReviewRouteIds.contains(route.baseRouteId)
-                  ? '방문 시간 다시 맞추기'
-                  : '방문 시간 맞추기',
+            OutlinedButton.icon(
+              key: ValueKey('add-${route.baseRouteId}'),
+              onPressed: () => _addPassenger(route),
+              icon: const Icon(Icons.person_add_alt),
+              label: const Text('이용자 추가·복귀·재배정'),
             ),
-          ),
-          Text(
-            '기본 방문 순서: ${c.baseRoute(route.baseRouteId).passengerIds.map((id) => c.passenger(id).name).join(' → ')}',
-            style: const TextStyle(color: Colors.black54),
-          ),
-          const Divider(height: 32),
-          RouteTimeline(
-            controller: c,
-            route: route,
-            compact: true,
-            focusedPassengerId: _focusedPassengerId,
-            actionsBuilder: (id, index) => Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 4,
+            OutlinedButton.icon(
+              key: ValueKey('bulk-time-${route.baseRouteId}'),
+              onPressed: () => _bulkTimes(route),
+              icon: const Icon(Icons.auto_awesome_outlined),
+              label: Text(
+                c.pendingTimeReviewRouteIds.contains(route.baseRouteId)
+                    ? '방문 시간 다시 맞추기'
+                    : '방문 시간 맞추기',
+              ),
+            ),
+            ExpansionTile(
+              key: ValueKey('course-settings-$scope'),
+              tilePadding: EdgeInsets.zero,
+              title: const Text('추가 설정'),
+              expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                TextButton.icon(
-                  key: ValueKey('time-$id'),
-                  onPressed: () => _editTime(route, passengerId: id),
-                  icon: const Icon(Icons.schedule, size: 18),
-                  label: const Text('시각 수정'),
+                OutlinedButton.icon(
+                  key: ValueKey('operating-${route.baseRouteId}'),
+                  onPressed: () => _editTime(route),
+                  icon: const Icon(Icons.schedule),
+                  label: Text(
+                    '예상 운행 ${minuteLabel(route.startMinute)}–${minuteLabel(route.endMinute)}',
+                  ),
                 ),
-                IconButton(
-                  key: ValueKey('up-$id'),
-                  tooltip: '방문 순서 위로',
-                  onPressed: index == 0
-                      ? null
-                      : () => c.reorder(route.baseRouteId, index, -1),
-                  icon: const Icon(Icons.arrow_upward),
-                ),
-                IconButton(
-                  key: ValueKey('down-$id'),
-                  tooltip: '방문 순서 아래로',
-                  onPressed: index == route.passengerIds.length - 1
-                      ? null
-                      : () => c.reorder(route.baseRouteId, index, 1),
-                  icon: const Icon(Icons.arrow_downward),
-                ),
-                TextButton(
-                  key: ValueKey('move-$id'),
-                  onPressed: () => _reassign(route, id),
-                  child: const Text('재배정 →'),
-                ),
-                TextButton(
-                  key: ValueKey('exclude-$id'),
-                  onPressed: () => c.excludePassenger(id),
-                  child: const Text('제외'),
-                ),
-                TextButton(
-                  key: ValueKey('absent-$id'),
-                  onPressed: () => c.markAbsent(id),
-                  child: const Text('결석'),
+                Text(
+                  '기본 방문 순서: ${c.baseRoute(route.baseRouteId).passengerIds.map((id) => c.passenger(id).name).join(' → ')}',
+                  style: const TextStyle(color: Colors.black54),
                 ),
               ],
             ),
-          ),
-          OutlinedButton.icon(
-            key: ValueKey('add-${route.baseRouteId}'),
-            onPressed: () => _addPassenger(route),
-            icon: const Icon(Icons.person_add_alt),
-            label: const Text('이용자 추가·복귀·재배정'),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   Future<void> _transferCourse(RouteAssignment route) async {
     final snapshot = c.draft;

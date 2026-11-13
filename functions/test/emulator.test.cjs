@@ -84,6 +84,38 @@ test('Firestore + Auth + callable Emulator integration, 40 staff / 79 passengers
   }
   let first;
   try {
+    await t.test('callable upgrades legacy estimates, preserves mixed sources in own projection, and rejects invalid sources atomically', async () => {
+      const payload = request('2027-01-04');
+      const initial = await call(payload);
+      assert.equal(initial.ok, true, JSON.stringify(initial.error));
+      assert.equal(initial.result.version, 1);
+      const id = `${payload.date}_${payload.period}`;
+      const legacy = (await db.doc(`schedules/${id}`).get()).data();
+      assert.equal(legacy.routes[0].estimatedVisitSources, undefined);
+      payload.expectedVersion = 1;
+      payload.requestId = randomUUID();
+      for (const route of payload.routes) {
+        route.estimatedVisitSources = Object.fromEntries(route.passengerIds.map((id, i) => [id, i === 0 ? 'manual' : 'fixedInterval']));
+      }
+      const committed = await call(payload);
+      assert.equal(committed.ok, true, JSON.stringify(committed.error));
+      assert.equal(committed.result.version, 2);
+      assert.equal((await call(payload)).result.version, 2); // Retry is idempotent.
+      const saved = (await db.doc(`schedules/${id}`).get()).data();
+      const own = (await assertSucceeds(getDoc(doc(staffClient, `staffSchedules/s1/days/${id}`)))).data();
+      const ownStored = (await db.doc(`staffSchedules/s1/days/${id}`).get()).data();
+      assert.deepEqual(saved.routes, payload.routes);
+      assert.deepEqual(own.routes, payload.routes.filter(r => r.staffId === 's1'));
+      assert.deepEqual(own.routes[0].estimatedVisitMinutes, legacy.routes[0].estimatedVisitMinutes);
+      await assertFails(getDoc(doc(replacementClient, `staffSchedules/s1/days/${id}`)));
+      const invalid = structuredClone(payload);
+      invalid.expectedVersion = 2; invalid.requestId = randomUUID();
+      invalid.routes[0].estimatedVisitSources.p1 = 'invalid-source';
+      assert.equal((await call(invalid)).error.status, 'INVALID_ARGUMENT');
+      assert.deepEqual((await db.doc(`schedules/${id}`).get()).data(), saved);
+      assert.deepEqual((await db.doc(`staffSchedules/s1/days/${id}`).get()).data(), ownStored);
+      assert.equal((await db.doc(`schedules/${id}/commits/${invalid.requestId}`).get()).exists, false);
+    });
     await t.test('anonymous/staff cannot confirm; both roles authenticate through Auth emulator', async () => {
       assert.equal((await call(request(), null)).error.status, 'UNAUTHENTICATED');
       assert.equal((await call(request(), staff)).error.status, 'PERMISSION_DENIED');
