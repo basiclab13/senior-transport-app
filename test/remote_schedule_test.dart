@@ -57,6 +57,21 @@ void main() {
     expect(c.hasPendingChanges, isFalse);
   });
 
+  test('legacy server schedule rejection explains preservation and retains the draft', () async {
+    c.markAbsent('p2');
+    final edited = c.draft;
+    repository.publishFailure = FirebaseFunctionsException(
+      code: 'failed-precondition',
+      message: 'Existing schedule incompatible',
+      details: {'reason': 'existing-schedule-incompatible'},
+    );
+    expect(await c.publish(), isFalse);
+    expect(c.draft, same(edited));
+    expect(c.hasPendingChanges, isTrue);
+    expect(c.saveError, contains('서버 원본과 편집 초안은 보존'));
+    expect(c.conflict, isFalse);
+  });
+
   test(
     'another admin update preserves local edits and blocks blind overwrite',
     () async {

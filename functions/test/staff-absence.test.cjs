@@ -144,6 +144,7 @@ test('A-1 date-specific absence, transactional confirmation and security (20 sta
       await rejects(confirm(db,'adminA',schedule('2026-11-30')),'failed-precondition');
     });
     await t.test('A-2 20/80 whole-course handoff: absence, atomic confirmation, own staff reads, retry and date/period isolation', async () => {
+      // Uses the same production transaction service, not a test-only bypass.
       const date='2026-12-07';
       const original=schedule(date);
       await confirm(db,'adminA',original);
@@ -186,6 +187,29 @@ test('A-1 date-specific absence, transactional confirmation and security (20 sta
       await rejects(confirm(db,'adminA',operationRequest(catalog,date,'afternoon','absence-v1',randomUUID(),1)),'failed-precondition');
       await rejects(confirm(db,'staffA',{...handoff,requestId:randomUUID(),expectedVersion:2}),'permission-denied');
       await rejects(confirm(db,'adminB',{...handoff,requestId:randomUUID()}),'aborted');
+    });
+    await t.test('pre-deployment guard preserves malformed or extended existing schedules instead of overwriting them', async () => {
+      const date='2026-12-14';
+      const path=`schedules/${date}_morning`;
+      await confirm(db,'adminA',schedule(date));
+      const valid=(await db.doc(path).get()).data();
+      const projection=await db.doc(`staffSchedules/s1/days/${date}_morning`).get();
+      const cases=[{sentinel:'legacy'}, {...valid,version:0}, {...valid,version:'1'}, {...valid,version:-1},
+        {...valid,status:'draft'}, {...valid,schemaVersion:2}, {...valid,date:'2026-12-15'},
+        {...valid,confirmedAt:'invalid'}, {...valid,operatorNote:'preserve custom field'},
+        {...valid,routes:[{...valid.routes[0],operatorNote:'preserve route field'},...valid.routes.slice(1)]}];
+      for(const old of cases) {
+        await db.doc(path).set(old);
+        const before=await db.doc(path).get();
+        await rejects(confirm(db,'adminA',schedule(date,{expectedVersion:old.version===1?1:0})),'failed-precondition');
+        const after=await db.doc(path).get();
+        assert.ok(after.updateTime.isEqual(before.updateTime));
+        assert.deepEqual(after.data(),old);
+        assert.ok((await projection.ref.get()).updateTime.isEqual(projection.updateTime));
+        assert.equal((await db.collection(`${path}/commits`).get()).size,1);
+      }
+      await db.doc(path).set(valid);
+      assert.equal((await confirm(db,'adminA',schedule(date,{expectedVersion:1}))).version,2);
     });
     await t.test('rules allow admin date lists / staff own reads only; every client write is denied', async () => {
       const admin = env.authenticatedContext('adminA').firestore();

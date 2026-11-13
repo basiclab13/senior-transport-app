@@ -4,6 +4,7 @@ const { FieldValue } = require("firebase-admin/firestore");
 const { HttpsError } = require("firebase-functions/v2/https");
 const { validateRequest, validateSchedule, idPattern } = require("./validation");
 const { absenceData } = require("./staff-absence-service");
+const { validateExistingSchedule } = require("./existing-schedule");
 
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
@@ -28,7 +29,8 @@ async function confirm(db, uid, data) {
       return { scheduleId, version: receipt.data().version, requestId: data.requestId };
     }
     const old = existing.data();
-    if ((old?.version || 0) !== data.expectedVersion) throw new HttpsError("aborted", "다른 관리자가 일정을 변경했습니다. 최신본을 다시 확인해 주세요.");
+    if (existing.exists) validateExistingSchedule(old, data.date, data.period);
+    if ((old?.version ?? 0) !== data.expectedVersion) throw new HttpsError("aborted", "다른 관리자가 일정을 변경했습니다. 최신본을 다시 확인해 주세요.");
     if (data.catalogVersion !== (old?.catalogVersion || settings.data()?.catalogVersion)) throw new HttpsError("failed-precondition", "기본 데이터 버전이 변경되었습니다. 다시 불러와 주세요.");
     const catalogRef = db.doc(`catalogs/${data.catalogVersion}`);
     const metadata = await tx.get(catalogRef);

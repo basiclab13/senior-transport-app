@@ -479,6 +479,13 @@ class ScheduleController extends ChangeNotifier {
                   '일정 저장 권한이 없습니다. 관리자 계정과 활성 상태를 확인해 주세요.',
                 FirebaseFunctionsException(code: 'invalid-argument') =>
                   '서버 일정 검증에 실패했습니다. 근무·정원·중복 배정·예상 시각을 확인해 주세요.',
+                FirebaseFunctionsException(
+                  code: 'failed-precondition',
+                  details: final details,
+                )
+                    when details is Map &&
+                        details['reason'] == 'existing-schedule-incompatible' =>
+                  '기존 일정의 형식 또는 추가 필드를 확인해 주세요. 서버 원본과 편집 초안은 보존됩니다. 별도 검토·변환 전에는 덮어쓸 수 없습니다.',
                 FirebaseFunctionsException(code: 'failed-precondition') =>
                   '결근 상태 또는 기본 데이터 등록 상태를 확인해 주세요. 결근 직원의 코스는 재배정한 뒤 확정해야 합니다.',
                 _ => '일정 저장에 실패했습니다. 편집 내용은 유지됩니다. 네트워크·권한을 확인하고 다시 시도해 주세요.',
