@@ -7,6 +7,8 @@ import 'package:senior_transport_app/models/transport.dart';
 import 'package:senior_transport_app/services/schedule_controller.dart';
 import 'package:senior_transport_app/services/schedule_repository.dart';
 
+DateTime fixtureClock() => DateTime.utc(2026, 11, 12, 0);
+
 ScheduleCatalog demoCatalog() => ScheduleCatalog(
   version: 'test-v1',
   staff: DemoData.staff,
@@ -61,11 +63,13 @@ ScheduleCatalog largeCatalog() {
 ScheduleController fixtureController({
   required AppUser user,
   DateTime? initialDate,
+  DateTime Function()? clock,
   List<ScheduleSnapshot> initialConfirmed = const [],
 }) => ScheduleController(
   user: user,
   catalog: demoCatalog(),
   initialDate: initialDate,
+  clock: clock ?? fixtureClock,
   initialConfirmed: initialConfirmed,
 );
 

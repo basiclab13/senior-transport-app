@@ -1,5 +1,7 @@
 # Firestore 송영 일정 연동과 로컬 검증
 
+날짜별 직원 결근의 스키마·트랜잭션·기존 확정본의 운행 가능 여부 판단은 [staff-absence-a1.md](staff-absence-a1.md)를 함께 확인한다. 확정 상태만으로 정상 운행 가능하다고 판단하지 않고 현재 날짜별 결근을 함께 조회한다.
+
 ## 구현 범위
 
 Firebase Authentication의 이메일 로그인과 `users/{uid}` 역할 검증을 유지한다. 일반 앱은 Firestore를 조회하고, 관리자가 검토한 확정 요청만 `asia-northeast3`의 Callable Function `confirmSchedule`로 보낸다. 확정본은 Firestore에 영구 저장하며 직원별 문서의 실시간 변경을 구독한다. 미확정 편집 초안은 로컬에 유지하므로 새로고침 시 사라진다.

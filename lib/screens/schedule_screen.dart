@@ -4,6 +4,9 @@ import '../models/app_user.dart';
 import '../models/transport.dart';
 import '../services/schedule_controller.dart';
 import '../services/schedule_repository.dart';
+import '../services/schedule_selection_policy.dart';
+import '../models/schedule_changes.dart';
+import '../widgets/schedule_change_review.dart';
 import 'admin_schedule_view.dart';
 import 'staff_schedule_view.dart';
 
@@ -56,39 +59,27 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   Future<void> _confirm() async {
     final snapshot = c.draft;
+    final baseline = c.confirmed;
+    final catalog = c.catalog;
+    final changes = ScheduleChanges.compare(baseline, snapshot, catalog);
+    final absenceRevision = c.absenceRevisionKey;
     final approved = await showDialog<bool>(
       context: context,
       useRootNavigator: false,
       builder: (context) => AlertDialog(
-        title: Text('${c.period.label} 전체 직원 일정 검토'),
+        title: Text(
+          '${dateKey(snapshot.date)} (${ScheduleSelectionPolicy.weekday(snapshot.date)}) · ${snapshot.period.label}\n전체 직원 일정 검토',
+        ),
         content: SizedBox(
           width: 560,
           height: 380,
-          child: ListView(
-            children: [
-              Text('${dateKey(snapshot.date)} · ${snapshot.routes.length}개 코스'),
-              const SizedBox(height: 8),
-              Text(
-                c.isRemote
-                    ? '전체 직원 변경사항을 서버에서 다시 검증하고 Firestore에 함께 저장합니다.'
-                    : '로컬 테스트 일정입니다.',
-              ),
-              for (final route in snapshot.routes)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    '${c.staff(route.staffId).name} · ${c.baseRoute(route.baseRouteId).name}',
-                  ),
-                  subtitle: Text(
-                    '${c.vehicle(route.vehicleId).name} · 예상 ${minuteLabel(route.startMinute)}–${minuteLabel(route.endMinute)}\n'
-                    '${route.passengerIds.map((id) => '${c.passenger(id).name} (${minuteLabel(route.estimatedVisitMinutes[id])})').join(' → ')}',
-                  ),
-                ),
-              Text(
-                '결석 ${snapshot.absentIds.length}명 · 제외 ${snapshot.excludedIds.length}명',
-              ),
-              for (final warning in c.planningWarnings) Text(warning),
-            ],
+          child: ScheduleChangeReview(
+            catalog: catalog,
+            snapshot: snapshot,
+            baseline: baseline,
+            changes: changes,
+            remote: c.isRemote,
+            warnings: c.planningWarnings,
           ),
         ),
         actions: [
@@ -104,7 +95,24 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         ],
       ),
     );
-    if (approved != true || !mounted || !identical(snapshot, c.draft)) return;
+    if (approved != true || !mounted) return;
+    if (c.loading ||
+        c.saving ||
+        c.conflict ||
+        c.availabilityLoading ||
+        c.availabilityError != null ||
+        c.absenceSaving ||
+        absenceRevision != c.absenceRevisionKey ||
+        c.dataError != null ||
+        !identical(snapshot, c.draft) ||
+        !identical(baseline, c.confirmed)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('검토 중 일정이 바뀌었거나 조회 중입니다. 최신 내용으로 다시 검토해 주세요.'),
+        ),
+      );
+      return;
+    }
     final saved = await c.publish();
     if (!mounted || !saved) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -193,7 +201,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: c,
     builder: (context, _) {
-      if (c.loading || c.dataError != null) {
+      if (c.loading ||
+          c.dataError != null ||
+          c.availabilityLoading ||
+          c.availabilityError != null) {
         return Scaffold(
           appBar: AppBar(
             title: const Text('다정 송영 관리'),
@@ -208,14 +219,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           body: Center(
             child: Padding(
               padding: const EdgeInsets.all(24),
-              child: c.loading
+              child: c.loading || c.availabilityLoading
                   ? const CircularProgressIndicator(
                       semanticsLabel: 'Firestore 일정 조회 중',
                     )
                   : Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(c.dataError!),
+                        Text(c.dataError ?? c.availabilityError!),
                         TextButton(
                           onPressed: c.retryLoad,
                           child: const Text('다시 불러오기'),
@@ -261,6 +272,24 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                             : '가상 데이터 · 로컬 테스트',
                         style: TextStyle(fontSize: 12),
                       ),
+                      if (c.reassignmentNeeded || c.confirmedReassignmentNeeded)
+                        Text(
+                          c.confirmedReassignmentNeeded
+                              ? '기존 확정본에 결근 직원의 코스가 있습니다. 재배정 필요 · 새 확정 전에는 정상 운행 일정이 아닙니다.'
+                              : '결근 직원의 코스가 남아 있습니다. 재배정이 필요합니다.',
+                          key: const Key('staff-absence-warning'),
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      if (c.absenceSaving) const Text('결근 상태 저장 중…'),
+                      if (c.absenceError != null)
+                        Text(
+                          c.absenceError!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
                       if (widget.authError != null)
                         Text(
                           widget.authError!,
@@ -278,7 +307,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       if (c.conflict || c.saveError != null)
                         TextButton(
                           key: const Key('reload-schedule'),
-                          onPressed: c.saving ? null : _reload,
+                          onPressed: c.busy ? null : _reload,
                           child: const Text('편집 내용 폐기 후 최신본 불러오기'),
                         ),
                     ],
@@ -305,11 +334,23 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         ),
                         icon: const Icon(Icons.chevron_left),
                       ),
-                      OutlinedButton.icon(
-                        key: const Key('select-date'),
-                        onPressed: _pickDate,
-                        icon: const Icon(Icons.calendar_today, size: 18),
-                        label: Text(dateKey(c.selectedDate)),
+                      SizedBox(
+                        width: MediaQuery.sizeOf(context).width < 500
+                            ? 176
+                            : null,
+                        child: OutlinedButton.icon(
+                          key: const Key('select-date'),
+                          onPressed: _pickDate,
+                          icon: const Icon(Icons.calendar_today, size: 18),
+                          label: Text(
+                            c.selectedScheduleLabel,
+                            key: const Key('selected-schedule-label'),
+                            textAlign: TextAlign.center,
+                            style: MediaQuery.sizeOf(context).width < 500
+                                ? const TextStyle(fontSize: 12)
+                                : null,
+                          ),
+                        ),
                       ),
                       IconButton(
                         tooltip: '다음 날짜',
@@ -323,9 +364,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         icon: const Icon(Icons.chevron_right),
                       ),
                       TextButton(
-                        key: const Key('today'),
-                        onPressed: () => c.selectDate(DateTime.now()),
-                        child: const Text('오늘'),
+                        key: const Key('current-schedule'),
+                        onPressed: c.selectCurrentSchedule,
+                        child: const Text('현재 일정'),
                       ),
                       SegmentedButton<TransportPeriod>(
                         segments: const [
@@ -349,7 +390,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 Expanded(
                   child: admin
                       ? AbsorbPointer(
-                          absorbing: c.saving,
+                          absorbing: c.busy,
                           child: AdminScheduleView(controller: c),
                         )
                       : StaffScheduleView(controller: c),
@@ -374,7 +415,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Widget _reviewBar(List<String> errors) => LayoutBuilder(
     builder: (context, size) {
       final status = Text(
-        c.confirmed == null
+        c.confirmedReassignmentNeeded
+            ? '확정 이력 v${c.confirmed!.version} · 재배정 필요'
+            : c.confirmed == null
             ? '작성 중 · 아직 확정하지 않은 일정입니다.'
             : c.hasPendingChanges
             ? '수정 중 · 확정본 v${c.confirmed!.version} 유지'
@@ -392,7 +435,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       final confirm = FilledButton.icon(
         key: const Key('confirm-schedule'),
         onPressed:
-            !c.saving &&
+            !c.busy &&
                 !c.conflict &&
                 errors.isEmpty &&
                 (c.confirmed == null || c.hasPendingChanges)

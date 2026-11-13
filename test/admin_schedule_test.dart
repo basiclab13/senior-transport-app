@@ -86,6 +86,10 @@ void main() {
 
   testWidgets('관리자가 예상 방문 시각을 입력하고 수정한다', (tester) async {
     await open(tester, wide: true);
+    await tester.ensureVisible(find.byKey(const ValueKey('visit-p1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('visit-p1')));
+    await tester.pumpAndSettle();
     final edit = find.byKey(const ValueKey('time-p1'));
     await tester.ensureVisible(edit);
     await tester.tap(edit);
@@ -104,7 +108,7 @@ void main() {
     await tester.tap(find.byKey(const Key('save-estimated-time')));
     await tester.pumpAndSettle();
     expect(c.draft.routes.first.estimatedVisitMinutes['p1'], 490);
-    expect(find.text('예상 08:10'), findsOneWidget);
+    expect(find.textContaining('예상 08:10'), findsOneWidget);
   });
 
   testWidgets('이용자 재배정 후 여러 직원의 변경사항을 함께 검토하고 확정한다', (tester) async {

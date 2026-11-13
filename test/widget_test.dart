@@ -30,6 +30,10 @@ void main() {
     );
     await tester.tap(find.byKey(const ValueKey('staff-s1')));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('visit-p2')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('visit-p2')));
+    await tester.pumpAndSettle();
     final absent = find.byKey(const ValueKey('absent-p2'));
     await tester.ensureVisible(absent);
     await tester.pumpAndSettle();

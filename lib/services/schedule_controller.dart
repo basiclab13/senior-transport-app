@@ -8,16 +8,24 @@ import '../models/schedule_catalog.dart';
 import '../models/transport.dart';
 import '../models/app_user.dart';
 import 'schedule_repository.dart';
+import 'schedule_selection_policy.dart';
+import '../models/staff_absence.dart';
+import 'staff_availability_diagnostics.dart';
+import '../models/course_reassignment.dart';
 
 class ScheduleController extends ChangeNotifier {
   ScheduleController({
     required this.user,
     required this.catalog,
     DateTime? initialDate,
+    DateTime Function()? clock,
+    this.selectionPolicy = const ScheduleSelectionPolicy(),
     List<ScheduleSnapshot> initialConfirmed = const [],
-  }) {
-    final date = initialDate ?? DateTime.now();
+  }) : _clock = clock ?? DateTime.now {
+    final selection = selectionPolicy.select(_clock());
+    final date = initialDate ?? selection.date;
     selectedDate = DateTime(date.year, date.month, date.day);
+    period = initialDate == null ? selection.period : TransportPeriod.morning;
     // In-memory repository input for previews/tests. No server sync is implied.
     for (final snapshot in initialConfirmed) {
       if (snapshot.confirmedAt == null ||
@@ -35,19 +43,61 @@ class ScheduleController extends ChangeNotifier {
   ScheduleController.remote({
     required this.user,
     required ScheduleRepository repository,
-  }) : catalog = ScheduleCatalog.empty() {
+    DateTime Function()? clock,
+    void Function(String)? diagnosticLogger,
+    this.selectionPolicy = const ScheduleSelectionPolicy(),
+  }) : _clock = clock ?? DateTime.now,
+       catalog = ScheduleCatalog.empty() {
     _repository = repository;
-    final now = DateTime.now();
-    selectedDate = DateTime(now.year, now.month, now.day);
+    _diagnosticLogger = diagnosticLogger;
+    final selection = selectionPolicy.select(_clock());
+    selectedDate = selection.date;
+    period = selection.period;
     _connect();
   }
 
   ScheduleCatalog catalog;
+  final DateTime Function() _clock;
+  final ScheduleSelectionPolicy selectionPolicy;
+  String get selectedScheduleLabel =>
+      selectionPolicy.describe(selectedDate, period, _clock());
   ScheduleRepository? _repository;
   StreamSubscription<ScheduleViewData>? _subscription;
+  StreamSubscription<Map<String, StaffAbsence>>? _absenceSubscription;
+  Timer? _availabilityTimer;
+  void Function(String)? _diagnosticLogger;
+  static const availabilityVerificationTimeout = Duration(seconds: 15);
+  Map<String, StaffAbsence> absences = {};
+  bool availabilityLoading = false;
+  String? availabilityError;
+  bool absenceSaving = false;
+  String? absenceError;
+  Map<String, dynamic>? _pendingAbsence;
+  bool get supportsAbsences => _repository is StaffAvailabilityRepository;
+  bool get busy => saving || absenceSaving;
+  bool isStaffAbsent(String id) =>
+      absences[id]?.periods.contains(period) ?? false;
+  bool staffAvailable(Staff staff) =>
+      staff.isAvailable(selectedDate, period) && !isStaffAbsent(staff.id);
+  bool get reassignmentNeeded =>
+      draft.routes.any((r) => isStaffAbsent(r.staffId));
+  bool get confirmedReassignmentNeeded =>
+      confirmed?.routes.any((r) => isStaffAbsent(r.staffId)) ?? false;
+  String get absenceRevisionKey =>
+      (absences.entries.toList()..sort((a, b) => a.key.compareTo(b.key)))
+          .map((e) => '${e.key}:${e.value.version}')
+          .join('|');
   final Map<String, ScheduleCatalog> _catalogs = {};
   final Map<String, int> _baseVersions = {};
-  final Map<String, ({ScheduleSnapshot snapshot, String id})> _requests = {};
+  final Map<
+    String,
+    ({
+      ScheduleSnapshot snapshot,
+      String id,
+      Map<String, int>? availabilityVersions,
+    })
+  >
+  _requests = {};
   int _generation = 0;
   bool _disposed = false;
   bool loading = false;
@@ -57,10 +107,147 @@ class ScheduleController extends ChangeNotifier {
   String? saveError;
   bool get isRemote => _repository != null;
 
+  Future<bool> setStaffAbsence(
+    String staffId,
+    Set<TransportPeriod> periods,
+    bool absent,
+    int expectedVersion,
+  ) async {
+    _requireAdmin();
+    if (!supportsAbsences || periods.isEmpty) {
+      throw StateError('결근 저장소 연결과 시간대를 확인해 주세요.');
+    }
+    final day = dateKey(selectedDate);
+    final names = periods.map((p) => p.name).toList()..sort();
+    final previous = _pendingAbsence;
+    final request =
+        previous != null &&
+            previous['date'] == day &&
+            previous['staffId'] == staffId &&
+            previous['absent'] == absent &&
+            listEquals(List<String>.from(previous['periods'] as List), names)
+        ? previous
+        : <String, dynamic>{
+            'date': day,
+            'staffId': staffId,
+            'periods': names,
+            'absent': absent,
+            'expectedVersion': expectedVersion,
+            'catalogVersion': catalog.version,
+            'requestId': List.generate(
+              16,
+              (_) => Random.secure()
+                  .nextInt(256)
+                  .toRadixString(16)
+                  .padLeft(2, '0'),
+            ).join(),
+          };
+    _pendingAbsence = request;
+    absenceSaving = true;
+    absenceError = null;
+    notifyListeners();
+    try {
+      final result = await (_repository! as StaffAvailabilityRepository)
+          .setAbsence(request);
+      if (_disposed) return false;
+      if (day == dateKey(selectedDate) &&
+          (absences[staffId]?.version ?? 0) <= result.version) {
+        absences = Map.unmodifiable({...absences, staffId: result});
+      }
+      _pendingAbsence = null;
+      return true;
+    } catch (error) {
+      if (!_disposed) {
+        if (error is FirebaseFunctionsException &&
+            [
+              'aborted',
+              'permission-denied',
+              'invalid-argument',
+              'failed-precondition',
+              'already-exists',
+            ].contains(error.code)) {
+          _pendingAbsence = null;
+          absenceError = error.code == 'aborted'
+              ? '다른 관리자가 결근 상태를 변경했습니다. 최신 상태를 확인하고 다시 요청해 주세요.'
+              : '결근을 저장하지 못했습니다. 관리자 권한과 직원 정보를 확인해 주세요.';
+        } else {
+          absenceError =
+              '결근 저장 응답을 확인하지 못했습니다. 최신 상태를 확인한 뒤 같은 요청을 다시 시도해 주세요.';
+        }
+      }
+      return false;
+    } finally {
+      if (!_disposed) {
+        absenceSaving = false;
+        notifyListeners();
+      }
+    }
+  }
+
   void _connect() {
     final repository = _repository!;
     final generation = ++_generation;
     _subscription?.cancel();
+    _absenceSubscription?.cancel();
+    _availabilityTimer?.cancel();
+    _availabilityTimer = null;
+    absences = {};
+    availabilityError = null;
+    absenceError = null;
+    final availabilityRepository = repository is StaffAvailabilityRepository
+        ? repository as StaffAvailabilityRepository
+        : null;
+    availabilityLoading = availabilityRepository != null;
+    if (availabilityRepository != null) {
+      _waitForAvailability(generation);
+      _absenceSubscription = availabilityRepository
+          .watchAbsences(user, selectedDate)
+          .listen(
+            (values) {
+              if (_disposed || generation != _generation) return;
+              _availabilityTimer?.cancel();
+              _availabilityTimer = null;
+              final merged = Map<String, StaffAbsence>.from(values);
+              for (final entry in absences.entries) {
+                if ((merged[entry.key]?.version ?? 0) < entry.value.version) {
+                  merged[entry.key] = entry.value;
+                }
+              }
+              absences = Map.unmodifiable(merged);
+              availabilityLoading = false;
+              availabilityError = null;
+              logStaffAvailability(
+                values.isEmpty
+                    ? 'read_succeeded state=verified-empty'
+                    : 'read_succeeded state=verified documents=${values.length}',
+                logger: _diagnosticLogger,
+              );
+              notifyListeners();
+            },
+            onError: (Object error) {
+              if (_disposed || generation != _generation) return;
+              if (error is StaffAvailabilityUnverified) {
+                _waitForAvailability(generation);
+                logStaffAvailability(
+                  'read_waiting',
+                  error: error,
+                  logger: _diagnosticLogger,
+                );
+              } else {
+                _availabilityTimer?.cancel();
+                _availabilityTimer = null;
+                availabilityLoading = false;
+                availabilityError = staffAvailabilityErrorMessage(error);
+                logStaffAvailability(
+                  'read_failed',
+                  error: error,
+                  logger: _diagnosticLogger,
+                );
+              }
+              notifyListeners();
+            },
+          );
+    }
     loading = true;
     dataError = null;
     saveError = null;
@@ -87,6 +274,26 @@ class ScheduleController extends ChangeNotifier {
         );
   }
 
+  void _waitForAvailability(int generation) {
+    availabilityLoading = true;
+    availabilityError = null;
+    _availabilityTimer ??= Timer(availabilityVerificationTimeout, () {
+      if (_disposed || generation != _generation) return;
+      _availabilityTimer = null;
+      final error = TimeoutException(
+        'No verified server snapshot within 15 seconds',
+      );
+      availabilityLoading = false;
+      availabilityError = staffAvailabilityErrorMessage(error);
+      logStaffAvailability(
+        'read_failed',
+        error: error,
+        logger: _diagnosticLogger,
+      );
+      notifyListeners();
+    });
+  }
+
   void _accept(ScheduleViewData view, {bool discardDraft = false}) {
     final key = _currentKey;
     final previousCatalog = _catalogs[key];
@@ -108,7 +315,8 @@ class ScheduleController extends ChangeNotifier {
     } else {
       catalog = view.catalog;
       _catalogs[key] = catalog;
-      if (view.confirmed != null && validate(view.confirmed!).isNotEmpty) {
+      if (view.confirmed != null &&
+          validate(view.confirmed!, checkAbsences: false).isNotEmpty) {
         throw const FormatException('Invalid confirmed schedule');
       }
       _baseVersions[key] = view.confirmed?.version ?? 0;
@@ -143,7 +351,7 @@ class ScheduleController extends ChangeNotifier {
   }
 
   Future<void> reloadDiscardingDraft() async {
-    if (saving || _repository == null) return;
+    if (busy || _repository == null) return;
     final generation = ++_generation;
     final subscription = _subscription;
     _subscription = null;
@@ -190,7 +398,20 @@ class ScheduleController extends ChangeNotifier {
             (_) =>
                 Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'),
           ).join();
-    _requests[key] = (snapshot: snapshot, id: requestId);
+    final availabilityVersions =
+        previous != null && identical(previous.snapshot, snapshot)
+        ? previous.availabilityVersions
+        : supportsAbsences
+        ? {
+            for (final route in snapshot.routes)
+              route.staffId: absences[route.staffId]?.version ?? 0,
+          }
+        : null;
+    _requests[key] = (
+      snapshot: snapshot,
+      id: requestId,
+      availabilityVersions: availabilityVersions,
+    );
     final expected = _baseVersions[key] ?? 0;
     final catalogVersion = catalog.version;
     saving = true;
@@ -199,12 +420,23 @@ class ScheduleController extends ChangeNotifier {
     var saved = false;
     try {
       try {
-        await _repository!.publish(
-          snapshot,
-          catalogVersion,
-          expected,
-          requestId,
-        );
+        if (availabilityVersions != null) {
+          await (_repository! as StaffAvailabilityRepository)
+              .publishWithAvailability(
+                snapshot,
+                catalogVersion,
+                expected,
+                requestId,
+                availabilityVersions,
+              );
+        } else {
+          await _repository!.publish(
+            snapshot,
+            catalogVersion,
+            expected,
+            requestId,
+          );
+        }
         saved = true;
       } catch (error) {
         // A network response can be lost AFTER the atomic commit succeeded.
@@ -248,7 +480,7 @@ class ScheduleController extends ChangeNotifier {
                 FirebaseFunctionsException(code: 'invalid-argument') =>
                   '서버 일정 검증에 실패했습니다. 근무·정원·중복 배정·예상 시각을 확인해 주세요.',
                 FirebaseFunctionsException(code: 'failed-precondition') =>
-                  '기본 데이터 버전이나 등록 상태가 변경되었습니다. 최신본을 다시 불러와 주세요.',
+                  '결근 상태 또는 기본 데이터 등록 상태를 확인해 주세요. 결근 직원의 코스는 재배정한 뒤 확정해야 합니다.',
                 _ => '일정 저장에 실패했습니다. 편집 내용은 유지됩니다. 네트워크·권한을 확인하고 다시 시도해 주세요.',
               };
       }
@@ -266,6 +498,8 @@ class ScheduleController extends ChangeNotifier {
     _disposed = true;
     ++_generation;
     _subscription?.cancel();
+    _absenceSubscription?.cancel();
+    _availabilityTimer?.cancel();
     super.dispose();
   }
 
@@ -312,18 +546,25 @@ class ScheduleController extends ChangeNotifier {
   }
 
   void selectDate(DateTime date) {
-    if (saving) return;
-    selectedDate = DateTime(date.year, date.month, date.day);
-    if (_repository == null) {
-      _ensureDraft();
-    } else {
-      _connect();
-    }
-    notifyListeners();
+    _selectSchedule(date, period);
   }
 
   void selectPeriod(TransportPeriod value) {
-    if (saving) return;
+    _selectSchedule(selectedDate, value);
+  }
+
+  /// Explicit, one-shot return to the operating policy; never a background timer.
+  void selectCurrentSchedule() {
+    if (busy) return;
+    final selection = selectionPolicy.select(_clock());
+    _selectSchedule(selection.date, selection.period);
+  }
+
+  void _selectSchedule(DateTime date, TransportPeriod value) {
+    if (busy) return;
+    final target = DateTime(date.year, date.month, date.day);
+    if (target == selectedDate && value == period) return;
+    selectedDate = target;
     period = value;
     if (_repository == null) {
       _ensureDraft();
@@ -337,7 +578,11 @@ class ScheduleController extends ChangeNotifier {
     if (role != UserRole.admin) {
       throw StateError('관리자만 일정을 수정하고 확정할 수 있습니다.');
     }
-    if (saving || loading || dataError != null) {
+    if (busy ||
+        loading ||
+        dataError != null ||
+        availabilityLoading ||
+        availabilityError != null) {
       throw StateError('일정을 처리 중이거나 서버 데이터를 확인할 수 없습니다.');
     }
   }
@@ -488,6 +733,26 @@ class ScheduleController extends ChangeNotifier {
     _replaceRoute(route.copyWith(staffId: staffId, vehicleId: vehicleId));
   }
 
+  /// A-2 changes only the dated draft. Server publication stays explicit.
+  void reassignAbsentCourse(String routeId, String targetStaffId) {
+    _requireAdmin();
+    if (conflict) throw StateError('최신 확정본을 확인한 뒤 다시 재배정해 주세요.');
+    final route = draft.routes.firstWhere((r) => r.baseRouteId == routeId);
+    final target = staff(targetStaffId);
+    final reason = courseReassignmentBlockReason(
+      catalog,
+      draft,
+      route,
+      target,
+      {
+        for (final s in catalog.staff)
+          if (isStaffAbsent(s.id)) s.id,
+      },
+    );
+    if (reason != null) throw StateError(reason);
+    _replaceRoute(route.copyWith(staffId: targetStaffId));
+  }
+
   void _replaceRoute(RouteAssignment route) => _update(
     draft.copyWith(
       routes: [
@@ -498,7 +763,10 @@ class ScheduleController extends ChangeNotifier {
   );
 
   /// Demo routes overlap for the entire period; sequential reuse is out of scope.
-  List<String> validate(ScheduleSnapshot snapshot) {
+  List<String> validate(
+    ScheduleSnapshot snapshot, {
+    bool checkAbsences = true,
+  }) {
     final errors = <String>[];
     final staffIds = <String>{};
     final vehicleIds = <String>{};
@@ -551,6 +819,12 @@ class ScheduleController extends ChangeNotifier {
       if (bases.isEmpty) errors.add('$label: 기본 코스와 시간대를 확인해 주세요.');
       if (!routeIds.add(r.baseRouteId)) errors.add('$label: 코스가 중복되었습니다.');
       final employees = catalog.staff.where((s) => s.id == r.staffId);
+      if (checkAbsences &&
+          dateKey(snapshot.date) == dateKey(selectedDate) &&
+          snapshot.period == period &&
+          isStaffAbsent(r.staffId)) {
+        errors.add('$label: 결근 직원의 코스가 남아 있습니다. 재배정이 필요합니다.');
+      }
       if (employees.isEmpty) {
         errors.add('$label: 존재하지 않는 직원입니다.');
       } else if (!employees.first.isAvailable(snapshot.date, snapshot.period)) {

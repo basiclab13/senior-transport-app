@@ -17,7 +17,11 @@ void main() {
       const user = AppUser(uid: 'fictional-admin', role: UserRole.admin);
       final catalog = largeCatalog();
       final repository = MemoryScheduleRepository(catalog: catalog);
-      final c = ScheduleController.remote(user: user, repository: repository);
+      final c = ScheduleController.remote(
+        user: user,
+        repository: repository,
+        clock: fixtureClock,
+      );
       addTearDown(c.dispose);
       addTearDown(repository.changes.close);
       await tester.pumpWidget(
@@ -41,6 +45,10 @@ void main() {
       await tester.enterText(find.byKey(const Key('staff-search')), '김다정');
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('staff-s1')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('visit-p2')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('visit-p2')));
       await tester.pumpAndSettle();
       final absent = find.byKey(const ValueKey('absent-p2'));
       await tester.ensureVisible(absent);

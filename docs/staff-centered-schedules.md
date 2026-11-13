@@ -1,5 +1,15 @@
 # 직원 중심 송영 일정 화면
 
+> 결근 직원 상세에서 코스 전체를 넘기는 A-2 흐름과 배포 전 검토사항은 [staff-absence-a2.md](staff-absence-a2.md)를 참고한다.
+
+> A-1 관리자 날짜별 결근 등록·취소 및 확정 이력의 재배정 필요 표시는 [staff-absence-a1.md](staff-absence-a1.md)를 참고한다. 직원 마스터와 사용자 권한은 바꾸지 않는다.
+
+> 관리자 직원 이름 자연 정렬·재배정 대상 검색/필터·확정 변경 요약의 후속 구현은 [admin-usability-improvements.md](admin-usability-improvements.md)에 정리했다. 기존 화면 구조와 서버 검증·권한 체계를 유지한다.
+
+> 날짜·시간대 선택은 관리자/직원 공통으로 한국 시간의 09:30·19:00 기준을 사용한다. 자동 초기 선택, 수동 선택 유지, 현재 일정 복귀, 요일 표시 및 확정 대상 표시는 [schedule-selection.md](schedule-selection.md)를 참고한다.
+
+> 관리자 운영 규모 UI 개선: 전체 배정 현황, 이용자 검색·담당자 이동, 접는 방문 항목, 재배정 인원/정원 정보는 [admin-operations-ui.md](admin-operations-ui.md)를 참고한다. 기존 좌우/모바일 전환 구조와 서버 저장·권한 체계는 유지한다.
+
 > 이후 Firestore 저장·직원별 실시간 공유를 구현했다. 아래 메모리 저장·고정 직원 ID 관련 한계는 UI 구현 당시의 기록이며, 현재 동작과 실행 절차는 [firestore-schedules.md](firestore-schedules.md)를 참고한다. 사진 인증과 미확정 초안 서버 저장은 여전히 미구현이다.
 
 ## 기존 구조와 변경 계획

@@ -56,7 +56,11 @@ class StaffScheduleView extends StatelessWidget {
         if (c.confirmed == null)
           const Text('아직 확정된 일정이 없습니다.')
         else ...[
-          Text('최신 확정 일정 · v${c.confirmed!.version}'),
+          Text(
+            c.confirmedReassignmentNeeded
+                ? '기존 확정 이력 · v${c.confirmed!.version} · 결근으로 재배정 필요'
+                : '최신 확정 일정 · v${c.confirmed!.version}',
+          ),
           if (routes.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 24),

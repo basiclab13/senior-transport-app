@@ -3,6 +3,7 @@ const { createHash } = require("node:crypto");
 const { FieldValue } = require("firebase-admin/firestore");
 const { HttpsError } = require("firebase-functions/v2/https");
 const { validateRequest, validateSchedule, idPattern } = require("./validation");
+const { absenceData } = require("./staff-absence-service");
 
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
@@ -38,6 +39,15 @@ async function confirm(db, uid, data) {
       catalog[collection] = query.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
     }
     validateSchedule(data, catalog);
+    const assigned = [...new Set(data.routes.map((r) => r.staffId))];
+    const availability = assigned.length ? await tx.getAll(...assigned.map((id) => db.doc(`staffAvailability/${data.date}/staff/${id}`))) : [];
+    for (let i = 0; i < assigned.length; i++) {
+      const status = absenceData(availability[i], data.date, assigned[i]);
+      if (status.unavailablePeriods.includes(data.period)) throw new HttpsError('failed-precondition', '결근 직원의 코스가 남아 있습니다. 재배정이 필요합니다.');
+      if (data.expectedAvailabilityVersions !== undefined && data.expectedAvailabilityVersions[assigned[i]] !== status.version) {
+        throw new HttpsError('aborted', '검토 후 결근 상태가 변경되었습니다. 최신 상태로 다시 검토해 주세요.');
+      }
+    }
     const version = data.expectedVersion + 1;
     const snapshot = {
       schemaVersion: 1, catalogVersion: data.catalogVersion, date: data.date, period: data.period,

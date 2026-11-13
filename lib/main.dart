@@ -36,6 +36,11 @@ Future<void> main() async {
       functions.useFunctionsEmulator(emulatorHost, 5001);
     }
     if (kIsWeb) await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
+    if (kDebugMode) {
+      debugPrint(
+        '[firebase] project=${Firebase.app().options.projectId} environment=${emulator ? 'emulator' : 'firebase'} region=asia-northeast3 auth=${emulator ? '$emulatorHost:9099' : 'firebase-auth'} firestore=${emulator ? '$emulatorHost:8080' : 'firestore.googleapis.com'} functions=${emulator ? '$emulatorHost:5001' : 'asia-northeast3 callable'}',
+      );
+    }
     runApp(
       MyApp(
         schedules: FirebaseScheduleRepository(

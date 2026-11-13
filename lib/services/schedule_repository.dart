@@ -5,6 +5,8 @@ import '../models/app_user.dart';
 import '../models/schedule_catalog.dart';
 import '../models/schedule_codec.dart';
 import '../models/transport.dart';
+import '../models/staff_absence.dart';
+import 'staff_availability_diagnostics.dart';
 
 class ScheduleViewData {
   const ScheduleViewData(this.catalog, this.confirmed, {this.lastRequestId});
@@ -37,11 +39,82 @@ abstract class ScheduleRepository {
   );
 }
 
-class FirebaseScheduleRepository implements ScheduleRepository {
+abstract class StaffAvailabilityRepository {
+  Stream<Map<String, StaffAbsence>> watchAbsences(AppUser user, DateTime date);
+  Future<StaffAbsence> setAbsence(Map<String, dynamic> request);
+  Future<void> publishWithAvailability(
+    ScheduleSnapshot snapshot,
+    String catalogVersion,
+    int expectedVersion,
+    String requestId,
+    Map<String, int> versions,
+  );
+}
+
+class FirebaseScheduleRepository
+    implements ScheduleRepository, StaffAvailabilityRepository {
   FirebaseScheduleRepository(this.firestore, this.functions);
   final FirebaseFirestore firestore;
   final FirebaseFunctions functions;
   static const _server = GetOptions(source: Source.server);
+
+  @override
+  Stream<Map<String, StaffAbsence>> watchAbsences(AppUser user, DateTime date) {
+    final day = dateKey(date);
+    final collection = firestore.collection('staffAvailability/$day/staff');
+    logStaffAvailability(
+      'read_started project=${firestore.app.options.projectId} path=staffAvailability/$day/staff scope=${user.role == UserRole.admin ? 'admin-list' : 'own-document'}',
+    );
+    if (user.role == UserRole.staff) {
+      return collection
+          .doc(user.staffId!)
+          .snapshots(includeMetadataChanges: true)
+          .map((doc) {
+            return decodeStaffAvailability(
+              day,
+              {if (doc.exists) doc.id: doc.data()!},
+              isFromCache: doc.metadata.isFromCache,
+              hasPendingWrites: doc.metadata.hasPendingWrites,
+            );
+          });
+    }
+    return collection.snapshots(includeMetadataChanges: true).map((snapshot) {
+      return decodeStaffAvailability(
+        day,
+        {for (final doc in snapshot.docs) doc.id: doc.data()},
+        isFromCache: snapshot.metadata.isFromCache,
+        hasPendingWrites: snapshot.metadata.hasPendingWrites,
+      );
+    });
+  }
+
+  @override
+  Future<StaffAbsence> setAbsence(Map<String, dynamic> request) async {
+    final result = await functions
+        .httpsCallable('setStaffAbsence')
+        .call<Map<String, dynamic>>(request);
+    return StaffAbsence.fromJson(
+      request['staffId'] as String,
+      Map<String, dynamic>.from(result.data),
+    );
+  }
+
+  @override
+  Future<void> publishWithAvailability(
+    ScheduleSnapshot snapshot,
+    String catalogVersion,
+    int expectedVersion,
+    String requestId,
+    Map<String, int> versions,
+  ) async {
+    await functions.httpsCallable('confirmSchedule').call<void>({
+      ...scheduleToJson(snapshot),
+      'catalogVersion': catalogVersion,
+      'expectedVersion': expectedVersion,
+      'requestId': requestId,
+      'expectedAvailabilityVersions': versions,
+    });
+  }
 
   DocumentReference<Map<String, dynamic>> _reference(
     AppUser user,

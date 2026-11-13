@@ -11,7 +11,7 @@ function ids(value) {
       new Set(value).size !== value.length) reject("ID 목록에 잘못된 값 또는 중복이 있습니다.");
 }
 function validateRequest(data) {
-  keys(data, ["date", "period", "catalogVersion", "expectedVersion", "requestId", "routes", "absentIds", "excludedIds"]);
+  keys(data, ["date", "period", "catalogVersion", "expectedVersion", "requestId", "routes", "absentIds", "excludedIds", "expectedAvailabilityVersions"]);
   if (typeof data.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(data.date) ||
       !Number.isFinite(Date.parse(`${data.date}T00:00:00Z`)) ||
       new Date(`${data.date}T00:00:00Z`).toISOString().slice(0, 10) !== data.date ||
@@ -22,6 +22,11 @@ function validateRequest(data) {
   if (!Array.isArray(data.routes) || data.routes.length > 100 ||
       Buffer.byteLength(JSON.stringify(data)) > 700000) reject("일정 데이터 크기를 확인해 주세요.");
   ids(data.absentIds); ids(data.excludedIds);
+  if (data.expectedAvailabilityVersions !== undefined) {
+    const versions = data.expectedAvailabilityVersions;
+    if (!versions || typeof versions !== 'object' || Array.isArray(versions) || Object.keys(versions).length > 100 ||
+        Object.entries(versions).some(([id, version]) => !idPattern.test(id) || !Number.isSafeInteger(version) || version < 0)) reject('결근 정보 버전을 확인해 주세요.');
+  }
 }
 function validateSchedule(data, catalog) {
   const { staff, vehicles, passengers, baseRoutes } = catalog;

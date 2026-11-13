@@ -184,6 +184,20 @@ test('Firestore + Auth + callable Emulator integration, 40 staff / 79 passengers
       assert.equal((await confirm(instrumented, admin.localId, payload)).version, 1);
       assert.equal((await confirm(instrumented, admin.localId, payload)).version, 1);
     });
+    await t.test('setStaffAbsence callable authorizes admin only and persists date-scoped status', async () => {
+      const data = {date:'2026-12-01',staffId:'s1',periods:['morning','afternoon'],absent:true,expectedVersion:0,requestId:randomUUID(),catalogVersion:'scale-v1'};
+      async function callAbsence(user) {
+        const response = await fetch(`http://127.0.0.1:5001/${projectId}/asia-northeast3/setStaffAbsence`, {
+          method:'POST',headers:{'Content-Type':'application/json',...(user?{Authorization:`Bearer ${user.idToken}`}:{})},body:JSON.stringify({data}),
+        });
+        return response.json();
+      }
+      assert.equal((await callAbsence(null)).error.status,'UNAUTHENTICATED');
+      assert.equal((await callAbsence(staff)).error.status,'PERMISSION_DENIED');
+      assert.deepEqual((await callAbsence(admin)).result,{version:1,unavailablePeriods:['afternoon','morning']});
+      assert.equal((await db.doc('staffAvailability/2026-12-01/staff/s1').get()).data().updatedBy,admin.localId);
+      assert.equal((await call(request('2026-12-01'))).error.status,'FAILED_PRECONDITION');
+    });
     await t.test('inactive role and disabled staff mapping are denied; master baseline unchanged', async () => {
       await db.doc(`users/${admin.localId}`).update({active:false});
       assert.equal((await call(request('2026-11-22'))).error.status, 'PERMISSION_DENIED');

@@ -24,6 +24,15 @@ service cloud.firestore {
       allow get: if active();
       allow list, write: if false;
     }
+    match /staffAvailability/{date}/staff/{staffId} {
+      allow get: if admin() || ownStaff(staffId);
+      allow list: if admin();
+      allow write: if false;
+      match /commits/{requestId} {
+        allow get: if admin();
+        allow list, write: if false;
+      }
+    }
     match /catalogs/{version} {
       allow get: if active();
       allow list, write: if false;

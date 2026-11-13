@@ -4,6 +4,10 @@ import '../models/transport.dart';
 import '../services/schedule_controller.dart';
 import '../widgets/estimated_time_dialog.dart';
 import '../widgets/route_timeline.dart';
+import '../widgets/admin_assignment_overview.dart';
+import '../widgets/reassignment_dialog.dart';
+import '../widgets/course_reassignment_dialog.dart';
+import '../utils/staff_sort.dart';
 
 enum _WorkFilter { all, available, unavailable }
 
@@ -23,6 +27,9 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
   final _search = TextEditingController();
   String? _selectedId;
   bool _mobileDetail = false;
+  String? _focusedPassengerId;
+  String? _focusedRouteId;
+  final _focusedRouteKey = GlobalKey();
   _WorkFilter _work = _WorkFilter.all;
   _AssignmentFilter _assignment = _AssignmentFilter.all;
 
@@ -33,165 +40,229 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
   }
 
   List<Staff> get _filtered => c.catalog.staff.where((staff) {
-    final available = staff.isAvailable(c.selectedDate, c.period);
+    final available = c.staffAvailable(staff);
     final assigned = c.routesForStaff(staff.id).isNotEmpty;
     return staff.name.contains(_query.trim()) &&
         (_work == _WorkFilter.all ||
             available == (_work == _WorkFilter.available)) &&
         (_assignment == _AssignmentFilter.all ||
             assigned == (_assignment == _AssignmentFilter.assigned));
-  }).toList();
+  }).toList()..sort(compareStaffNames);
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, size) {
-      final wide = size.maxWidth >= 900;
-      final filtered = _filtered;
-      _selectedId ??= filtered.firstOrNull?.id;
-      final selected = filtered.any((staff) => staff.id == _selectedId)
-          ? _selectedId
-          : null;
-      final list = _staffList(filtered);
-      if (wide) {
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(width: 320, child: list),
-            const VerticalDivider(width: 1),
-            Expanded(child: _detail(selected)),
-          ],
-        );
-      }
-      if (!_mobileDetail || selected == null) return list;
-      return Column(
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              key: const Key('back-to-staff'),
-              onPressed: () => setState(() => _mobileDetail = false),
-              icon: const Icon(Icons.arrow_back),
-              label: const Text('직원 목록으로'),
-            ),
-          ),
-          Expanded(child: _detail(selected)),
-        ],
-      );
-    },
-  );
-
-  Widget _staffList(List<Staff> staff) => Column(
+  Widget build(BuildContext context) => Column(
     children: [
       Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 4,
           children: [
-            TextField(
-              key: const Key('staff-search'),
-              controller: _search,
-              decoration: const InputDecoration(
-                labelText: '직원 이름 검색',
-                prefixIcon: Icon(Icons.search),
-              ),
-              onChanged: (value) => setState(() => _query = value),
+            OutlinedButton.icon(
+              key: const Key('open-assignment-overview'),
+              onPressed: () => _openOverview(),
+              icon: const Icon(Icons.table_rows_outlined),
+              label: const Text('전체 배정 현황'),
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<_WorkFilter>(
-                    key: const Key('work-filter'),
-                    initialValue: _work,
-                    decoration: const InputDecoration(labelText: '근무 여부'),
-                    items: const [
-                      DropdownMenuItem(
-                        value: _WorkFilter.all,
-                        child: Text('전체'),
-                      ),
-                      DropdownMenuItem(
-                        value: _WorkFilter.available,
-                        child: Text('근무 가능'),
-                      ),
-                      DropdownMenuItem(
-                        value: _WorkFilter.unavailable,
-                        child: Text('근무 불가'),
-                      ),
-                    ],
-                    onChanged: (value) => setState(() => _work = value!),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: DropdownButtonFormField<_AssignmentFilter>(
-                    key: const Key('assignment-filter'),
-                    initialValue: _assignment,
-                    decoration: const InputDecoration(labelText: '배정 상태'),
-                    items: const [
-                      DropdownMenuItem(
-                        value: _AssignmentFilter.all,
-                        child: Text('전체'),
-                      ),
-                      DropdownMenuItem(
-                        value: _AssignmentFilter.assigned,
-                        child: Text('배정됨'),
-                      ),
-                      DropdownMenuItem(
-                        value: _AssignmentFilter.unassigned,
-                        child: Text('미배정'),
-                      ),
-                    ],
-                    onChanged: (value) => setState(() => _assignment = value!),
-                  ),
-                ),
-              ],
+            OutlinedButton.icon(
+              key: const Key('open-passenger-search'),
+              onPressed: () => _openOverview(passengerSearch: true),
+              icon: const Icon(Icons.person_search_outlined),
+              label: const Text('이용자 찾기'),
             ),
           ],
         ),
       ),
-      Align(
-        alignment: Alignment.centerLeft,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text('${staff.length}명 · ${c.period.label} 배정 기준'),
-        ),
-      ),
-      const SizedBox(height: 8),
       Expanded(
-        child: staff.isEmpty
-            ? const Center(child: Text('검색·필터에 맞는 직원이 없습니다.'))
-            : ListView.builder(
-                key: const Key('staff-list'),
-                itemCount: staff.length,
-                itemBuilder: (context, index) {
-                  final person = staff[index];
-                  final routes = c.routesForStaff(person.id);
-                  final available = person.isAvailable(
-                    c.selectedDate,
-                    c.period,
-                  );
-                  return ListTile(
-                    key: ValueKey('staff-${person.id}'),
-                    selected: person.id == _selectedId,
-                    leading: Icon(
-                      available
-                          ? Icons.person_outline
-                          : Icons.person_off_outlined,
-                    ),
-                    title: Text(person.name),
-                    subtitle: Text(
-                      '${available ? '근무 가능' : '근무 불가'} · ${routes.isEmpty ? '미배정' : '${routes.length}개 코스 배정'}',
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => setState(() {
-                      _selectedId = person.id;
-                      _mobileDetail = true;
-                    }),
-                  );
-                },
-              ),
+        child: LayoutBuilder(
+          builder: (context, size) {
+            final wide = size.maxWidth >= 900;
+            final filtered = _filtered;
+            _selectedId ??= filtered.firstOrNull?.id;
+            final selected = filtered.any((staff) => staff.id == _selectedId)
+                ? _selectedId
+                : null;
+            final list = _staffList(filtered);
+            if (wide) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(width: 320, child: list),
+                  const VerticalDivider(width: 1),
+                  Expanded(child: _detail(selected)),
+                ],
+              );
+            }
+            if (!_mobileDetail || selected == null) return list;
+            return Column(
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    key: const Key('back-to-staff'),
+                    onPressed: () => setState(() => _mobileDetail = false),
+                    icon: const Icon(Icons.arrow_back),
+                    label: const Text('직원 목록으로'),
+                  ),
+                ),
+                Expanded(child: _detail(selected)),
+              ],
+            );
+          },
+        ),
       ),
     ],
   );
+
+  Widget _staffList(List<Staff> staff) => CustomScrollView(
+    key: const Key('staff-list'),
+    slivers: [
+      SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              TextField(
+                key: const Key('staff-search'),
+                controller: _search,
+                decoration: const InputDecoration(
+                  labelText: '직원 이름 검색',
+                  prefixIcon: Icon(Icons.search),
+                ),
+                onChanged: (value) => setState(() => _query = value),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<_WorkFilter>(
+                      key: const Key('work-filter'),
+                      initialValue: _work,
+                      decoration: const InputDecoration(labelText: '근무 여부'),
+                      items: const [
+                        DropdownMenuItem(
+                          value: _WorkFilter.all,
+                          child: Text('전체'),
+                        ),
+                        DropdownMenuItem(
+                          value: _WorkFilter.available,
+                          child: Text('근무 가능'),
+                        ),
+                        DropdownMenuItem(
+                          value: _WorkFilter.unavailable,
+                          child: Text('근무 불가'),
+                        ),
+                      ],
+                      onChanged: (value) => setState(() => _work = value!),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<_AssignmentFilter>(
+                      key: const Key('assignment-filter'),
+                      initialValue: _assignment,
+                      decoration: const InputDecoration(labelText: '배정 상태'),
+                      items: const [
+                        DropdownMenuItem(
+                          value: _AssignmentFilter.all,
+                          child: Text('전체'),
+                        ),
+                        DropdownMenuItem(
+                          value: _AssignmentFilter.assigned,
+                          child: Text('배정됨'),
+                        ),
+                        DropdownMenuItem(
+                          value: _AssignmentFilter.unassigned,
+                          child: Text('미배정'),
+                        ),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => _assignment = value!),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+      SliverToBoxAdapter(
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text('${staff.length}명 · ${c.period.label} 배정 기준'),
+          ),
+        ),
+      ),
+      const SliverToBoxAdapter(child: SizedBox(height: 8)),
+      if (staff.isEmpty)
+        const SliverToBoxAdapter(
+          child: Center(child: Text('검색·필터에 맞는 직원이 없습니다.')),
+        )
+      else
+        SliverList.builder(
+          itemCount: staff.length,
+          itemBuilder: (context, index) {
+            final person = staff[index];
+            final routes = c.routesForStaff(person.id);
+            final available = c.staffAvailable(person);
+            return ListTile(
+              key: ValueKey('staff-${person.id}'),
+              selected: person.id == _selectedId,
+              leading: Icon(
+                available ? Icons.person_outline : Icons.person_off_outlined,
+              ),
+              title: Text(person.name),
+              subtitle: Text(
+                '${c.isStaffAbsent(person.id)
+                    ? '결근'
+                    : available
+                    ? '근무 가능'
+                    : '근무 불가'} · ${routes.isEmpty ? '미배정' : '${routes.length}개 코스 배정'}${c.isStaffAbsent(person.id) && routes.isNotEmpty ? ' · 재배정 필요' : ''}',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => setState(() {
+                _selectedId = person.id;
+                _focusedPassengerId = null;
+                _focusedRouteId = null;
+                _mobileDetail = true;
+              }),
+            );
+          },
+        ),
+    ],
+  );
+
+  Future<void> _openOverview({bool passengerSearch = false}) async {
+    final selection = await showDialog<AdminScheduleSelection>(
+      context: context,
+      useRootNavigator: false,
+      builder: (_) => AdminAssignmentOverview(
+        controller: c,
+        passengerSearch: passengerSearch,
+      ),
+    );
+    if (!mounted ||
+        selection == null ||
+        !c.catalog.staff.any((s) => s.id == selection.staffId)) {
+      return;
+    }
+    setState(() {
+      _search.clear();
+      _query = '';
+      _work = _WorkFilter.all;
+      _assignment = _AssignmentFilter.all;
+      _selectedId = selection.staffId;
+      _mobileDetail = true;
+      _focusedPassengerId = selection.passengerId;
+      _focusedRouteId = selection.routeId;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final target = _focusedRouteKey.currentContext;
+      if (mounted && target != null) Scrollable.ensureVisible(target);
+    });
+  }
 
   Widget _detail(String? staffId) {
     if (staffId == null) return const Center(child: Text('목록에서 직원을 선택해 주세요.'));
@@ -206,8 +277,21 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         Text(
-          '${dateKey(c.selectedDate)} · ${c.period.label} · ${staff.isAvailable(c.selectedDate, c.period) ? '근무 가능' : '근무 불가'}',
+          '${dateKey(c.selectedDate)} · ${c.period.label} · ${c.isStaffAbsent(staffId)
+              ? '결근'
+              : c.staffAvailable(staff)
+              ? '근무 가능'
+              : '근무 불가'}',
         ),
+        if (c.supportsAbsences)
+          OutlinedButton.icon(
+            key: ValueKey('staff-absence-$staffId'),
+            onPressed: c.busy ? null : () => _editAbsence(staffId),
+            icon: const Icon(Icons.event_busy),
+            label: const Text('날짜별 결근 등록·취소'),
+          ),
+        if (c.isStaffAbsent(staffId) && routes.isNotEmpty)
+          const Text('결근 직원의 코스 · 재배정 필요', style: TextStyle(color: Colors.red)),
         const SizedBox(height: 12),
         const Text('방문 시각은 관리자 입력 예상 시간이며 실제 운행 시각과 다를 수 있습니다.'),
         if (routes.isEmpty) ...[
@@ -255,6 +339,7 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
   }
 
   Widget _routeEditor(RouteAssignment route) => Card(
+    key: _focusedRouteId == route.baseRouteId ? _focusedRouteKey : null,
     margin: const EdgeInsets.only(top: 16),
     child: Padding(
       padding: const EdgeInsets.all(16),
@@ -268,6 +353,15 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
           Text(
             '이용자 ${route.passengerIds.length}/${c.vehicle(route.vehicleId).passengerCapacity}명',
           ),
+          if (c.isStaffAbsent(route.staffId))
+            FilledButton.icon(
+              key: ValueKey('transfer-course-${route.baseRouteId}'),
+              onPressed: c.busy || c.conflict
+                  ? null
+                  : () => _transferCourse(route),
+              icon: const Icon(Icons.swap_horiz),
+              label: const Text('코스 전체 재배정'),
+            ),
           const SizedBox(height: 16),
           Wrap(
             spacing: 12,
@@ -276,16 +370,17 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
               SizedBox(
                 width: 230,
                 child: DropdownButtonFormField<String>(
-                    isExpanded: true,
+                  isExpanded: true,
                   key: ValueKey('${route.baseRouteId}-staff-${route.staffId}'),
                   initialValue: route.staffId,
                   decoration: const InputDecoration(labelText: '담당 직원'),
                   items: [
-                    for (final staff in c.catalog.staff)
+                    for (final staff
+                        in (c.catalog.staff.toList()..sort(compareStaffNames)))
                       DropdownMenuItem(
                         value: staff.id,
                         child: Text(
-                          '${staff.name}${staff.isAvailable(c.selectedDate, c.period) ? '' : ' (근무 불가)'}',
+                          '${staff.name}${c.staffAvailable(staff) ? '' : ' (근무 불가)'}',
                         ),
                       ),
                   ],
@@ -297,7 +392,7 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
               SizedBox(
                 width: 230,
                 child: DropdownButtonFormField<String>(
-                    isExpanded: true,
+                  isExpanded: true,
                   key: ValueKey(
                     '${route.baseRouteId}-vehicle-${route.vehicleId}',
                   ),
@@ -337,6 +432,8 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
           RouteTimeline(
             controller: c,
             route: route,
+            compact: true,
+            focusedPassengerId: _focusedPassengerId,
             actionsBuilder: (id, index) => Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
               spacing: 4,
@@ -363,25 +460,10 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
                       : () => c.reorder(route.baseRouteId, index, 1),
                   icon: const Icon(Icons.arrow_downward),
                 ),
-                PopupMenuButton<String>(
+                TextButton(
                   key: ValueKey('move-$id'),
-                  tooltip: '다른 직원으로 재배정',
-                  onSelected: (routeId) => c.movePassenger(id, routeId),
-                  itemBuilder: (_) => [
-                    for (final other in c.draft.routes.where(
-                      (r) => r.staffId != route.staffId,
-                    ))
-                      PopupMenuItem(
-                        value: other.baseRouteId,
-                        child: Text(
-                          '${c.staff(other.staffId).name} · ${c.baseRoute(other.baseRouteId).name}',
-                        ),
-                      ),
-                  ],
-                  child: const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Text('재배정 →'),
-                  ),
+                  onPressed: () => _reassign(route, id),
+                  child: const Text('재배정 →'),
                 ),
                 TextButton(
                   key: ValueKey('exclude-$id'),
@@ -407,6 +489,86 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
     ),
   );
 
+  Future<void> _transferCourse(RouteAssignment route) async {
+    final snapshot = c.draft;
+    final revision = c.absenceRevisionKey;
+    final catalog = c.catalog;
+    final target = await showDialog<String>(
+      context: context,
+      useRootNavigator: false,
+      builder: (_) => CourseReassignmentDialog(
+        catalog: catalog,
+        snapshot: snapshot,
+        route: route,
+        absentStaffIds: {
+          for (final staff in catalog.staff)
+            if (c.isStaffAbsent(staff.id)) staff.id,
+        },
+      ),
+    );
+    if (target == null || !mounted) return;
+    if (c.busy ||
+        c.loading ||
+        c.dataError != null ||
+        c.availabilityLoading ||
+        c.availabilityError != null ||
+        c.conflict ||
+        !identical(snapshot, c.draft) ||
+        !identical(catalog, c.catalog) ||
+        revision != c.absenceRevisionKey) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('일정 또는 결근 상태가 변경되었습니다. 대상을 다시 확인해 주세요.')),
+      );
+      return;
+    }
+    try {
+      c.reassignAbsentCourse(route.baseRouteId, target);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${c.staff(route.staffId).name} → ${c.staff(target).name} · 재배정 초안 반영. 전체 직원 변경 검토·확정이 필요합니다.',
+          ),
+        ),
+      );
+    } on StateError catch (error) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
+    }
+  }
+
+  Future<void> _reassign(RouteAssignment route, String passengerId) async {
+    final snapshot = c.draft;
+    final target = await showDialog<String>(
+      context: context,
+      useRootNavigator: false,
+      builder: (_) => ReassignmentDialog(
+        catalog: c.catalog,
+        snapshot: snapshot,
+        sourceStaffId: route.staffId,
+        passengerId: passengerId,
+        absentStaffIds: c.absences.values
+            .where((a) => a.periods.contains(c.period))
+            .map((a) => a.staffId)
+            .toSet(),
+      ),
+    );
+    if (target == null || !mounted) return;
+    if (c.loading ||
+        c.busy ||
+        c.availabilityLoading ||
+        c.availabilityError != null ||
+        c.dataError != null ||
+        !identical(snapshot, c.draft)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('일정이 변경되었거나 조회 중입니다. 재배정 대상을 다시 확인해 주세요.'),
+        ),
+      );
+      return;
+    }
+    c.movePassenger(passengerId, target);
+  }
+
   Future<void> _editTime(RouteAssignment route, {String? passengerId}) async {
     final snapshot = c.draft;
     final result = await showDialog<List<int?>>(
@@ -422,12 +584,102 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
             : [route.estimatedVisitMinutes[passengerId]],
       ),
     );
-    if (result == null || !mounted || !identical(snapshot, c.draft)) return;
+    if (result == null ||
+        !mounted ||
+        !identical(snapshot, c.draft) ||
+        c.busy ||
+        c.loading ||
+        c.dataError != null ||
+        c.availabilityLoading ||
+        c.availabilityError != null) {
+      return;
+    }
     if (passengerId == null) {
       c.setOperatingWindow(route.baseRouteId, result[0], result[1]);
     } else {
       c.setVisitMinute(route.baseRouteId, passengerId, result[0]);
     }
+  }
+
+  Future<void> _editAbsence(String staffId) async {
+    final day = dateKey(c.selectedDate);
+    final existing = c.absences[staffId];
+    var scope = c.period.name;
+    final result = await showDialog<({Set<TransportPeriod> periods, bool absent})>(
+      context: context,
+      useRootNavigator: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, change) => AlertDialog(
+          scrollable: true,
+          title: Text('${c.staff(staffId).name} · $day 결근'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '현재 결근: ${existing == null || existing.periods.isEmpty ? '없음' : existing.periods.map((p) => p.label).join(' · ')}',
+              ),
+              const SizedBox(height: 12),
+              SegmentedButton<String>(
+                key: const Key('absence-scope'),
+                segments: const [
+                  ButtonSegment(value: 'morning', label: Text('오전')),
+                  ButtonSegment(value: 'afternoon', label: Text('오후')),
+                  ButtonSegment(value: 'all', label: Text('종일')),
+                ],
+                selected: {scope},
+                onSelectionChanged: (v) => change(() => scope = v.single),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                '선택한 날짜에만 적용됩니다. 담당 코스가 남으면 재배정 필요로 표시되며, 일정은 자동으로 수정·확정되지 않습니다.',
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('닫기'),
+            ),
+            OutlinedButton(
+              key: const Key('cancel-staff-absence'),
+              onPressed: () => Navigator.pop(context, (
+                periods: scope == 'all'
+                    ? TransportPeriod.values.toSet()
+                    : {TransportPeriod.values.byName(scope)},
+                absent: false,
+              )),
+              child: const Text('결근 취소'),
+            ),
+            FilledButton(
+              key: const Key('register-staff-absence'),
+              onPressed: () => Navigator.pop(context, (
+                periods: scope == 'all'
+                    ? TransportPeriod.values.toSet()
+                    : {TransportPeriod.values.byName(scope)},
+                absent: true,
+              )),
+              child: const Text('결근 등록'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    if (day != dateKey(c.selectedDate) ||
+        c.busy ||
+        c.loading ||
+        c.dataError != null ||
+        c.availabilityLoading ||
+        c.availabilityError != null) {
+      return;
+    }
+    await c.setStaffAbsence(
+      staffId,
+      result.periods,
+      result.absent,
+      existing?.version ?? 0,
+    );
   }
 
   Future<void> _addPassenger(RouteAssignment route) async {
@@ -500,7 +752,14 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
         },
       ),
     );
-    if (id != null && mounted && identical(snapshot, c.draft)) {
+    if (id != null &&
+        mounted &&
+        identical(snapshot, c.draft) &&
+        !c.busy &&
+        !c.loading &&
+        c.dataError == null &&
+        !c.availabilityLoading &&
+        c.availabilityError == null) {
       c.addPassenger(id, route.baseRouteId);
     }
   }

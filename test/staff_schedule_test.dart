@@ -96,7 +96,7 @@ void main() {
     );
     await tester.tap(find.byTooltip('다음 날짜'));
     await tester.pumpAndSettle();
-    expect(find.text('2026-11-13'), findsOneWidget);
+    expect(find.text('내일 · 11월 13일 (금) · 오후'), findsOneWidget);
     expect(find.text('아직 확정된 일정이 없습니다.'), findsOneWidget);
     expect(find.byKey(const ValueKey('timeline-p3')), findsNothing);
     await tester.tap(find.byTooltip('이전 날짜'));

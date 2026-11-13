@@ -9,10 +9,14 @@ class RouteTimeline extends StatelessWidget {
     required this.controller,
     required this.route,
     this.actionsBuilder,
+    this.compact = false,
+    this.focusedPassengerId,
   });
   final ScheduleController controller;
   final RouteAssignment route;
   final Widget Function(String passengerId, int index)? actionsBuilder;
+  final bool compact;
+  final String? focusedPassengerId;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -30,6 +34,23 @@ class RouteTimeline extends StatelessWidget {
 
   Widget _stop(BuildContext context, String id, int index) {
     final passenger = controller.passenger(id);
+    if (compact) {
+      return ExpansionTile(
+        key: ValueKey('compact-$id-${focusedPassengerId == id}'),
+        initiallyExpanded: focusedPassengerId == id,
+        leading: CircleAvatar(radius: 16, child: Text('${index + 1}')),
+        title: Text(passenger.name, key: ValueKey('visit-$id')),
+        subtitle: Text(
+          '${passenger.address}\n예상 ${minuteLabel(route.estimatedVisitMinutes[id])}',
+        ),
+        childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        expandedCrossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (passenger.note.isNotEmpty) Text(passenger.note),
+          if (actionsBuilder != null) actionsBuilder!(id, index),
+        ],
+      );
+    }
     return IntrinsicHeight(
       child: Row(
         key: ValueKey('timeline-$id'),

@@ -25,7 +25,11 @@ void main() {
   Future<void> settle() => Future<void>.delayed(Duration.zero);
   setUp(() async {
     repository = MemoryScheduleRepository();
-    c = ScheduleController.remote(user: admin, repository: repository);
+    c = ScheduleController.remote(
+      user: admin,
+      repository: repository,
+      clock: fixtureClock,
+    );
     await settle();
   });
   tearDown(() async {
