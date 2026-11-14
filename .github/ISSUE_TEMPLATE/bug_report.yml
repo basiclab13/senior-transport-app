@@ -1,0 +1,76 @@
+name: 오류 제보
+description: 앱이 예상과 다르게 동작할 때 작성해 주세요.
+title: "[오류] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        비밀번호, API 키, UID, 토큰, 개인정보, 전체 Console 로그를 올리지 마세요.
+        운영 앱에서 오류를 다시 만들려고 일정 확정·AI 요청·사진 등록을 반복하지 마세요.
+  - type: dropdown
+    id: environment
+    attributes:
+      label: 어디에서 확인했나요?
+      options:
+        - 배포된 웹 앱
+        - 내 PC의 Emulator
+        - 잘 모르겠음
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: 사용한 화면
+      options:
+        - 관리자
+        - 직원
+        - 로그인 화면
+        - 잘 모르겠음
+    validations:
+      required: true
+  - type: input
+    id: context
+    attributes:
+      label: 확인 시각과 선택한 일정
+      description: 한국 시간, 일정 날짜와 오전/오후를 적어 주세요. 계정 주소나 UID는 쓰지 않습니다.
+      placeholder: "확인 시각: 월/일 시:분 / 선택 일정: 월/일 오전"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 어떤 순서로 진행했나요?
+      description: 누른 버튼과 이동한 화면을 차례대로 적어 주세요.
+      placeholder: "1. 송영 현황을 연다.\n2. 직원 이름을 검색한다.\n3. …"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 기대한 결과
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 실제 결과
+      description: 화면 안내나 안전한 오류 코드가 있으면 적어 주세요. 민감한 전체 로그는 붙이지 않습니다.
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: 기기와 브라우저
+      placeholder: "예: Windows Chrome / 휴대폰 Safari / 화면 너비 390px"
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: 스크린샷 (선택)
+      description: 민감정보를 잘라낸 이미지만 붙여 넣거나 끌어 놓아 주세요.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: 제출 전 확인
+      options:
+        - label: 비밀번호·키·토큰·UID·개인정보가 글과 이미지에 없는지 확인했습니다.
+          required: true
