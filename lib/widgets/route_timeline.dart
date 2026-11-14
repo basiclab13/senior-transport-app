@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../utils/display_wording.dart';
+
 import '../models/transport.dart';
 import '../services/schedule_controller.dart';
+import '../utils/visit_time_wording.dart';
 
 class RouteTimeline extends StatelessWidget {
   const RouteTimeline({
@@ -36,21 +39,23 @@ class RouteTimeline extends StatelessWidget {
 
   Widget _stop(BuildContext context, String id, int index) {
     final passenger = controller.passenger(id);
+    final time = visitTimeText(controller.period, route, id);
     if (collapseNotes && passenger.note.isEmpty) {
       return ListTile(
         key: ValueKey('timeline-$id'),
         leading: CircleAvatar(radius: 16, child: Text('${index + 1}')),
-        title: Text(passenger.name, key: ValueKey('visit-$id')),
+        title: Text(displayName(passenger.name), key: ValueKey('visit-$id')),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '예상 ${minuteLabel(route.estimatedVisitMinutes[id])}',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).colorScheme.primary,
+            if (time != null)
+              Text(
+                time,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
               ),
-            ),
             Text(passenger.address),
           ],
         ),
@@ -63,26 +68,25 @@ class RouteTimeline extends StatelessWidget {
             : ValueKey('compact-$id-${focusedPassengerId == id}'),
         initiallyExpanded: focusedPassengerId == id,
         leading: CircleAvatar(radius: 16, child: Text('${index + 1}')),
-        title: Text(passenger.name, key: ValueKey('visit-$id')),
+        title: Text(displayName(passenger.name), key: ValueKey('visit-$id')),
         subtitle: collapseNotes
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '예상 ${minuteLabel(route.estimatedVisitMinutes[id])}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.primary,
+                  if (time != null)
+                    Text(
+                      time,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                     ),
-                  ),
                   Text(passenger.address),
                   if (passenger.note.isNotEmpty)
                     const Text('특이사항 보기', style: TextStyle(fontSize: 12)),
                 ],
               )
-            : Text(
-                '${passenger.address}\n예상 ${minuteLabel(route.estimatedVisitMinutes[id])}',
-              ),
+            : Text([passenger.address, ?time].join('\n')),
         childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
         expandedCrossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -113,16 +117,17 @@ class RouteTimeline extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '예상 ${minuteLabel(route.estimatedVisitMinutes[id])}',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontWeight: FontWeight.bold,
+                  if (time != null)
+                    Text(
+                      time,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
                   const SizedBox(height: 4),
                   Text(
-                    passenger.name,
+                    displayName(passenger.name),
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   Text(passenger.address),

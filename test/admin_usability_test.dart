@@ -153,15 +153,15 @@ void main() {
     (tester) async {
       c.confirm();
       c.markAbsent('p2');
-      keepReviewedTimes(c);
+
       await open(tester);
       await tester.tap(find.byKey(const Key('confirm-schedule')));
       await tester.pumpAndSettle();
       expect(find.text('공유된 일정에서 1항목이 바뀝니다.'), findsOneWidget);
-      expect(find.text('가상 어르신 B: 결석 처리'), findsNothing);
+      expect(find.text('어르신 B: 결석 처리'), findsNothing);
       await tester.tap(find.byKey(const ValueKey('course-review-morning-a')));
       await tester.pumpAndSettle();
-      expect(find.text('가상 어르신 B: 결석 처리'), findsOneWidget);
+      expect(find.text('어르신 B: 결석 처리'), findsOneWidget);
       expect(find.text('김다정 · 햇살 A코스'), findsNothing);
       await tester.scrollUntilVisible(
         find.byKey(const Key('review-all-schedules')),
@@ -216,7 +216,7 @@ void main() {
       addTearDown(repo.changes.close);
       await open(tester);
       c.markAbsent('p2');
-      keepReviewedTimes(c);
+
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('confirm-schedule')));
       await tester.pumpAndSettle();

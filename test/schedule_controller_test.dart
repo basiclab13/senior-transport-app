@@ -56,7 +56,7 @@ void main() {
     c.markAbsent('p2');
     expect(c.confirmed!.routes.first.passengerIds, contains('p2'));
     expect(c.confirmed, same(previous));
-    keepReviewedTimes(c);
+
     c.confirm();
     expect(c.confirmed!.version, 2);
     expect(c.confirmed!.routes.first.passengerIds, ['p1', 'p3']);
@@ -148,7 +148,7 @@ void main() {
     expect(c.routesForStaff('s2').single.passengerIds, ['p5']);
     expect(c.draft.routes.first.estimatedVisitMinutes['p4'], 490);
     expect(c.validationErrors, isEmpty);
-    keepReviewedTimes(c);
+
     c.confirm();
     expect(c.confirmed!.routes.first.passengerIds, ['p1', 'p3', 'p4']);
     expect(c.confirmed!.routes.last.passengerIds, ['p5']);
@@ -171,20 +171,18 @@ void main() {
     expect(c.validationErrors, isEmpty);
   });
 
-  test('예상 시각은 날짜·시간대별로 보존되고 순서 역전·범위 이탈을 차단한다', () {
+  test('약속 시간은 날짜·시간대별로 보존되고 순서·운행 구간은 확정을 막지 않는다', () {
     c.setOperatingWindow('morning-a', 480, 570);
     c.setVisitMinute('morning-a', 'p1', 490);
     c.setVisitMinute('morning-a', 'p2', 500);
     c.setVisitMinute('morning-a', 'p3', 510);
     c.confirm();
-    final previous = c.confirmed;
     c.reorder('morning-a', 0, 1);
-    expect(c.validationErrors.join(), contains('예상 방문 시각이 충돌'));
-    expect(c.confirm, throwsStateError);
-    expect(c.confirmed, same(previous));
+    expect(c.validationErrors, isEmpty);
+    c.confirm();
     c.reorder('morning-a', 0, 1);
     c.setVisitMinute('morning-a', 'p3', 600);
-    expect(c.validationErrors.join(), contains('운행 시간 범위'));
+    expect(c.validationErrors, isEmpty);
     c.setVisitMinute('morning-a', 'p3', null);
     expect(c.validationErrors, isEmpty);
     c.selectPeriod(TransportPeriod.afternoon);

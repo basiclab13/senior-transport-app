@@ -8,10 +8,12 @@ class EstimatedTimeDialog extends StatefulWidget {
     required this.title,
     required this.labels,
     required this.minutes,
+    this.guidance = 'HH:mm 형식으로 입력하세요. 모두 비우면 미입력으로 변경됩니다.',
   });
   final String title;
   final List<String> labels;
   final List<int?> minutes;
+  final String guidance;
 
   @override
   State<EstimatedTimeDialog> createState() => _EstimatedTimeDialogState();
@@ -51,9 +53,7 @@ class _EstimatedTimeDialogState extends State<EstimatedTimeDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                '관리자 입력 예상 시각입니다. HH:mm 형식으로 입력하세요. 모두 비우면 미입력으로 변경됩니다.',
-              ),
+              Text(widget.guidance),
               for (var i = 0; i < _fields.length; i++)
                 Padding(
                   padding: const EdgeInsets.only(top: 16),
@@ -72,11 +72,6 @@ class _EstimatedTimeDialogState extends State<EstimatedTimeDialog> {
                       final minute = _parse(text ?? '');
                       if (minute == null) {
                         return '00:00~23:59 범위의 HH:mm 시각을 입력해 주세요.';
-                      }
-                      if (i == 1 &&
-                          _parse(_fields[0].text) != null &&
-                          minute <= _parse(_fields[0].text)!) {
-                        return '종료 시각은 출발 시각보다 늦어야 합니다.';
                       }
                       return null;
                     },
@@ -101,7 +96,7 @@ class _EstimatedTimeDialogState extends State<EstimatedTimeDialog> {
             ]);
           }
         },
-        child: const Text('적용'),
+        child: const Text('저장'),
       ),
     ],
   );

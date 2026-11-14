@@ -53,6 +53,8 @@ class PhotoRepository implements AttendanceRepository {
     required String routeId,
     required WorkPhotoKind kind,
     required Uint8List photo,
+    int? expectedVersion,
+    int? expectedAvailabilityVersion,
   }) async {
     if (fail) throw Exception('simulated network failure');
     final record = AttendanceRecord(
@@ -142,6 +144,30 @@ void main() {
     expect(find.textContaining('2026-11-12 09:15:00'), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
+  testWidgets('카메라와 사진 선택을 구분하며 선택 메뉴 취소는 저장하지 않는다', (tester) async {
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AttendanceScreen(
+          controller: c,
+          staffId: 's1',
+          staffName: '김다정',
+          date: DateTime(2026, 11, 12),
+          period: TransportPeriod.morning,
+          routeId: 'morning-a',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(button('start'));
+    await tester.pumpAndSettle();
+    expect(find.text('카메라로 촬영'), findsOneWidget);
+    expect(find.text('사진 선택'), findsOneWidget);
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    expect(repo.attendance.records, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('사진 선택이나 명시적 확인을 취소하면 기록하지 않는다', (tester) async {
     await open(tester, picker: () async => null);
     await tester.tap(button('start'));
@@ -210,14 +236,14 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final link = find.byKey(const ValueKey('attendance-s1'));
     await openAdminEditor(tester);
-    await openStaffInfo(tester, 's1');
-    await tester.ensureVisible(link);
-    await tester.tap(link);
     await tester.pumpAndSettle();
-    expect(find.text('김다정 업무 사진 기록'), findsOneWidget);
+    expect(find.text('업무 시작·종료 기록'), findsOneWidget);
     expect(find.textContaining('2026-11-12 09:15:00'), findsOneWidget);
+    expect(find.byType(Image), findsNothing);
+    await tester.tap(find.text('사진 보기'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Image), findsOneWidget);
     expect(button('start'), findsNothing);
     expect(button('end'), findsNothing);
   });
@@ -235,7 +261,7 @@ void main() {
   testWidgets('Emulator가 아닌 환경에서는 등록하지 않는다', (tester) async {
     repo.attendance.enabled = false;
     await open(tester);
-    expect(find.text('사진 등록은 Emulator 시연 환경에서 사용할 수 있습니다.'), findsOneWidget);
+    expect(find.text('사진 등록을 사용할 수 없습니다. 관리자에게 문의해 주세요.'), findsOneWidget);
     expect(button('start'), findsNothing);
   });
 }

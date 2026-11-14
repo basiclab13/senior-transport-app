@@ -244,10 +244,12 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(find.text('접힌 추천 근거'), findsNothing);
-        expect(find.byKey(const Key('ai-distance-limit')), findsOneWidget);
+        expect(find.byKey(const Key('ai-distance-limit')), findsNothing);
+        await tester.tap(find.byKey(const ValueKey('course-review-morning-1')));
+        await tester.pumpAndSettle();
         expect(find.text('기존 순서'), findsOneWidget);
         expect(find.text('추천 순서'), findsOneWidget);
-        expect(find.text('가상 1코스 · 김다정'), findsOneWidget);
+        expect(find.text('1코스 · 김다정'), findsOneWidget);
         expect(c.draft, same(original));
         await screenshot(tester, 'ai-${width.toInt()}');
         final more = find.byKey(const Key('ai-more-details'));

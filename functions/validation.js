@@ -4,7 +4,7 @@ const idPattern = /^[A-Za-z0-9_-]{1,80}$/;
 const violationTypes=new Set(['INVALID_INPUT','UNSUPPORTED_FIELDS','ID_LIST_INVALID','ID_DUPLICATE',
   'PASSENGER_DUPLICATE','REMOVED_STATUS_INVALID','ROUTE_UNKNOWN','ROUTE_DUPLICATE','ROUTE_MISSING',
   'STAFF_UNAVAILABLE','STAFF_DUPLICATE','STAFF_ABSENT','VEHICLE_DUPLICATE','VEHICLE_INVALID','VEHICLE_CAPACITY_EXCEEDED',
-  'ESTIMATE_REFERENCE_INVALID','ESTIMATE_SOURCE_INVALID','OPERATING_WINDOW_INVALID','VISIT_TIME_CONFLICT',
+  'ESTIMATE_REFERENCE_INVALID','ESTIMATE_SOURCE_INVALID','OPERATING_WINDOW_INVALID','VISIT_TIME_CONFLICT','VISIT_TIME_INVALID',
   'PASSENGER_UNKNOWN','REMOVED_PASSENGER_ASSIGNED','PASSENGER_MISSING',
   'RESPONSE_FORMAT_INVALID','RESPONSE_FIELDS_FORBIDDEN','REASONS_INVALID','ROUTE_COUNT_MISMATCH','REASSIGNMENT_NOT_JUSTIFIED']);
 function safeViolation(error) {return violationTypes.has(error?.details?.violation)?error.details.violation:undefined;}
@@ -61,13 +61,12 @@ function validateSchedule(data, catalog) {
     if (route.passengerIds.length > vehicle.passengerCapacity) reject("차량 참조 또는 정원을 확인해 주세요.",'VEHICLE_CAPACITY_EXCEEDED');
     const times = route.estimatedVisitMinutes;
     if (!times || typeof times !== "object" || Array.isArray(times) ||
-        Object.keys(times).some((id) => !route.passengerIds.includes(id))) reject("예상 방문 시각의 이용자 참조를 확인해 주세요.",'ESTIMATE_REFERENCE_INVALID');
+        Object.keys(times).some((id) => !route.passengerIds.includes(id))) reject("시간 기록의 이용자 참조를 확인해 주세요.",'ESTIMATE_REFERENCE_INVALID');
     const sources=route.estimatedVisitSources;
-    if(sources!==undefined&&(!sources||typeof sources!=='object'||Array.isArray(sources)||Object.entries(sources).some(([id,source])=>!Object.hasOwn(times,id)||!['manual','fixedInterval'].includes(source))))reject('예상 시각 출처의 형식과 이용자 참조를 확인해 주세요.','ESTIMATE_SOURCE_INVALID');
+    if(sources!==undefined&&(!sources||typeof sources!=='object'||Array.isArray(sources)||Object.entries(sources).some(([id,source])=>!Object.hasOwn(times,id)||!['manual','fixedInterval'].includes(source))))reject('시간 기록의 입력 방식과 이용자 참조를 확인해 주세요.','ESTIMATE_SOURCE_INVALID');
     const start = route.startMinute, end = route.endMinute;
-    if ((start == null) !== (end == null) || (start != null &&
-        (!validMinute(start) || !validMinute(end) || start >= end))) reject("예상 운행 시작·종료 시각을 확인해 주세요.",'OPERATING_WINDOW_INVALID');
-    let previous = -1;
+    // Legacy operating records are preserved, not scheduling constraints.
+    if ((start != null && !validMinute(start)) || (end != null && !validMinute(end))) reject("저장된 운행 기록의 시간 형식을 확인해 주세요.",'OPERATING_WINDOW_INVALID');
     for (const id of route.passengerIds) {
       if (!expectedIds.has(id) || !passengers.some((p) => p.id === id)) reject("이용자 중복·참조·결석 배정을 확인해 주세요.",'PASSENGER_UNKNOWN');
       if (usedPassengers.has(id)) reject("이용자 중복·참조·결석 배정을 확인해 주세요.",'PASSENGER_DUPLICATE');
@@ -75,8 +74,7 @@ function validateSchedule(data, catalog) {
       usedPassengers.add(id);
       if (Object.hasOwn(times, id)) {
         const minute = times[id];
-        if (!validMinute(minute) || minute <= previous || (start != null && (minute < start || minute > end))) reject("예상 시각이 방문 순서 또는 운행 범위와 충돌합니다.",'VISIT_TIME_CONFLICT');
-        previous = minute;
+        if (!validMinute(minute)) reject("시간 기록은 0부터 1439까지의 정수여야 합니다.",'VISIT_TIME_INVALID');
       }
     }
   }

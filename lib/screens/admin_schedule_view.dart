@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
 
-import 'attendance_screen.dart';
+import '../utils/schedule_wording.dart';
+import '../utils/display_wording.dart';
+
+import '../widgets/admin_work_photos.dart';
 
 import '../models/transport.dart';
-import '../models/visit_time_review.dart';
 import '../services/schedule_controller.dart';
-import '../services/visit_time_calculator.dart';
 import '../widgets/estimated_time_dialog.dart';
 import '../widgets/route_timeline.dart';
 import '../widgets/admin_assignment_overview.dart';
 import '../widgets/admin_transport_dashboard.dart';
 import '../widgets/reassignment_dialog.dart';
 import '../widgets/course_reassignment_dialog.dart';
-import '../widgets/bulk_visit_time_dialog.dart';
 import '../utils/staff_sort.dart';
-import '../utils/schedule_wording.dart';
 
 enum _WorkFilter { all, available, unavailable }
 
@@ -53,7 +52,7 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
   List<Staff> get _filtered => c.catalog.staff.where((staff) {
     final available = c.staffAvailable(staff);
     final assigned = c.routesForStaff(staff.id).isNotEmpty;
-    return staff.name.contains(_query.trim()) &&
+    return displayName(staff.name).contains(displayName(_query.trim())) &&
         (_work == _WorkFilter.all ||
             available == (_work == _WorkFilter.available)) &&
         (_assignment == _AssignmentFilter.all ||
@@ -240,13 +239,13 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
               leading: Icon(
                 available ? Icons.person_outline : Icons.person_off_outlined,
               ),
-              title: Text(person.name),
+              title: Text(displayName(person.name)),
               subtitle: Text(
                 '${c.isStaffAbsent(person.id)
                     ? '결근'
                     : available
                     ? '근무 가능'
-                    : '근무 불가'} · ${routes.isEmpty ? '미배정' : '${routes.length}개 코스 배정'}${c.isStaffAbsent(person.id) && routes.isNotEmpty ? ' · 다른 직원 배정 필요' : ''}${routes.any((r) => c.pendingTimeReviewRouteIds.contains(r.baseRouteId)) ? ' · 방문 시간 확인 필요' : ''}',
+                    : '근무 불가'} · ${routes.isEmpty ? '미배정' : '${routes.length}개 코스 배정'}${c.isStaffAbsent(person.id) && routes.isNotEmpty ? ' · 다른 직원 배정 필요' : ''}',
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => setState(() {
@@ -305,48 +304,43 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
       padding: const EdgeInsets.all(16),
       children: [
         Text(
-          '${staff.name}님의 송영 일정',
+          displayName(staff.name),
           style: Theme.of(context).textTheme.headlineSmall,
         ),
         Text(
-          '${dateKey(c.selectedDate)} · ${c.period.label} · ${c.isStaffAbsent(staffId)
+          c.isStaffAbsent(staffId)
               ? '결근'
               : c.staffAvailable(staff)
               ? '근무 가능'
-              : '근무 불가'}',
+              : '근무 불가',
         ),
-        if (c.attendanceRepository?.enabled == true || c.supportsAbsences)
-          ExpansionTile(
+        if (c.supportsAbsences && !c.isCatalogPreview)
+          Wrap(
             key: ValueKey('staff-info-$staffId'),
-            tilePadding: EdgeInsets.zero,
-            dense: true,
-            title: const Text('직원 정보 · 결근/사진'),
+            spacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              if (c.attendanceRepository?.enabled == true)
-                OutlinedButton.icon(
-                  key: ValueKey('attendance-$staffId'),
-                  icon: const Icon(Icons.photo_library_outlined),
-                  label: const Text('업무 시작·종료 기록 보기'),
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => AttendanceScreen(
-                        controller: c,
-                        staffId: staff.id,
-                        staffName: staff.name,
-                        date: c.selectedDate,
-                        period: c.period,
-                      ),
-                    ),
-                  ),
-                ),
-              if (c.supportsAbsences)
+              const Text('직원 정보 및 결근 관리'),
+              if (c.supportsAbsences && !c.isCatalogPreview)
                 OutlinedButton.icon(
                   key: ValueKey('staff-absence-$staffId'),
                   onPressed: c.busy ? null : () => _editAbsence(staffId),
                   icon: const Icon(Icons.event_busy),
-                  label: const Text('날짜별 결근 등록·취소'),
+                  label: const Text('결근 등록·취소'),
                 ),
             ],
+          ),
+        if (c.attendanceRepository?.enabled == true)
+          AdminWorkPhotos(
+            key: ValueKey('attendance-$staffId'),
+            repository: c.attendanceRepository!,
+            user: c.user,
+            staffId: staffId,
+            date: dateKey(c.selectedDate),
+            period: c.period,
+            routeNames: {
+              for (final r in c.catalog.baseRoutes) r.id: displayName(r.name),
+            },
           ),
         if (c.isStaffAbsent(staffId) && routes.isNotEmpty)
           const Text(
@@ -354,7 +348,6 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
             style: TextStyle(color: Colors.red),
           ),
         const SizedBox(height: 12),
-        const Text('방문 시각은 관리자 입력 예상 시간이며 실제 운행 시각과 다를 수 있습니다.'),
         if (routes.isEmpty) ...[
           const SizedBox(height: 24),
           const Text('이 직원에게 배정된 코스가 없습니다. 기존 코스의 담당 직원을 변경할 수 있습니다.'),
@@ -367,7 +360,7 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
                 PopupMenuItem(
                   value: route.baseRouteId,
                   child: Text(
-                    '${c.baseRoute(route.baseRouteId).name} · 현재 ${c.staff(route.staffId).name}',
+                    '${displayName(c.baseRoute(route.baseRouteId).name)} · 현재 ${displayName(c.staff(route.staffId).name)}',
                   ),
                 ),
             ],
@@ -387,7 +380,7 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
               for (final id in {...c.draft.absentIds, ...c.draft.excludedIds})
                 ActionChip(
                   label: Text(
-                    '${c.passenger(id).name} · ${c.draft.absentIds.contains(id) ? '결석' : '제외'}',
+                    '${displayName(c.passenger(id).name)} · ${c.draft.absentIds.contains(id) ? '결석' : '제외'}',
                   ),
                   tooltip: '기본 코스로 복귀',
                   onPressed: () => c.restorePassenger(id),
@@ -412,10 +405,6 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
               r.baseRouteId != route.baseRouteId &&
               (r.staffId == route.staffId || r.vehicleId == route.vehicleId),
         );
-    final operatingWarning = visitTimeWarnings(
-      route,
-      route.estimatedVisitMinutes,
-    ).any((warning) => warning.contains('운행'));
     return Card(
       key: _focusedRouteId == route.baseRouteId ? _focusedRouteKey : null,
       margin: const EdgeInsets.only(top: 16),
@@ -425,18 +414,18 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              c.baseRoute(route.baseRouteId).name,
+              displayName(c.baseRoute(route.baseRouteId).name),
               style: Theme.of(context).textTheme.titleLarge,
             ),
             Text(
               '이용자 ${route.passengerIds.length}/${c.vehicle(route.vehicleId).passengerCapacity}명',
             ),
             Text(
-              '담당 직원 · ${c.staff(route.staffId).name}',
+              '담당 직원 · ${displayName(c.staff(route.staffId).name)}',
               key: ValueKey('assigned-staff-${route.baseRouteId}'),
             ),
             Text(
-              '담당 차량 · ${c.vehicle(route.vehicleId).name}',
+              '담당 차량 · ${displayName(c.vehicle(route.vehicleId).name)}',
               key: ValueKey('assigned-vehicle-${route.baseRouteId}'),
             ),
             Align(
@@ -460,13 +449,6 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
                 label: Text(
                   capacityExceeded ? '정원 초과 · 차량 변경하기' : '직원·차량 배정 확인하기',
                 ),
-              ),
-            if (operatingWarning)
-              TextButton.icon(
-                key: ValueKey('fix-operating-${route.baseRouteId}'),
-                onPressed: () => _editTime(route),
-                icon: const Icon(Icons.warning_amber),
-                label: const Text('운행 시간 범위 확인·수정'),
               ),
             if (c.isStaffAbsent(route.staffId))
               FilledButton.icon(
@@ -498,7 +480,7 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
                           DropdownMenuItem(
                             value: staff.id,
                             child: Text(
-                              '${staff.name}${c.staffAvailable(staff) ? '' : ' (근무 불가)'}',
+                              '${displayName(staff.name)}${c.staffAvailable(staff) ? '' : ' (근무 불가)'}',
                             ),
                           ),
                       ],
@@ -523,7 +505,7 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
                           DropdownMenuItem(
                             value: vehicle.id,
                             child: Text(
-                              '${vehicle.name} (${vehicle.passengerCapacity}명)',
+                              '${displayName(vehicle.name)} (${vehicle.passengerCapacity}명)',
                             ),
                           ),
                       ],
@@ -537,39 +519,9 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
                 ],
               ),
             const SizedBox(height: 8),
-            if (c.timeReviews[route.baseRouteId] case final review?) ...[
-              Card(
-                color: review.decision == VisitTimeReviewDecision.pending
-                    ? Theme.of(context).colorScheme.errorContainer
-                    : Theme.of(context).colorScheme.surfaceContainerHighest,
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        review.decision.label,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      Text(
-                        review.decision == VisitTimeReviewDecision.pending
-                            ? '방문 순서가 바뀌었습니다. 위의 「변경된 방문 시간 맞추기」를 누르거나 기존 시간을 확인해 주세요.'
-                            : '방문 시간 확인을 마쳤습니다. 다른 변경사항을 확인한 후 최종 확정해 주세요.',
-                      ),
-                      if (review.decision == VisitTimeReviewDecision.pending)
-                        TextButton(
-                          key: ValueKey('keep-times-${route.baseRouteId}'),
-                          onPressed: () => _keepTimes(route),
-                          child: const Text('기존 시간 그대로 쓰기'),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
             const Divider(height: 16),
-            const Text(
-              '방문 순서 · 예상 방문 시각',
+            Text(
+              c.period == TransportPeriod.morning ? '방문 순서 · 약속 시간' : '방문 순서',
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             RouteTimeline(
@@ -581,12 +533,13 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 spacing: 4,
                 children: [
-                  TextButton.icon(
-                    key: ValueKey('time-$id'),
-                    onPressed: () => _editTime(route, passengerId: id),
-                    icon: const Icon(Icons.schedule, size: 18),
-                    label: const Text('시각 수정'),
-                  ),
+                  if (c.period == TransportPeriod.morning)
+                    TextButton.icon(
+                      key: ValueKey('time-$id'),
+                      onPressed: () => _editTime(route, passengerId: id),
+                      icon: const Icon(Icons.schedule, size: 18),
+                      label: const Text('약속 시간 입력'),
+                    ),
                   IconButton(
                     key: ValueKey('up-$id'),
                     tooltip: '방문 순서 위로',
@@ -627,32 +580,14 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
               icon: const Icon(Icons.person_add_alt),
               label: const Text('이용자 추가·복귀·재배정'),
             ),
-            OutlinedButton.icon(
-              key: ValueKey('bulk-time-${route.baseRouteId}'),
-              onPressed: () => _bulkTimes(route),
-              icon: const Icon(Icons.auto_awesome_outlined),
-              label: Text(
-                c.pendingTimeReviewRouteIds.contains(route.baseRouteId)
-                    ? '방문 시간 다시 맞추기'
-                    : '방문 시간 맞추기',
-              ),
-            ),
             ExpansionTile(
               key: ValueKey('course-settings-$scope'),
               tilePadding: EdgeInsets.zero,
               title: const Text('추가 설정'),
               expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                OutlinedButton.icon(
-                  key: ValueKey('operating-${route.baseRouteId}'),
-                  onPressed: () => _editTime(route),
-                  icon: const Icon(Icons.schedule),
-                  label: Text(
-                    '예상 운행 ${minuteLabel(route.startMinute)}–${minuteLabel(route.endMinute)}',
-                  ),
-                ),
                 Text(
-                  '기본 방문 순서: ${c.baseRoute(route.baseRouteId).passengerIds.map((id) => c.passenger(id).name).join(' → ')}',
+                  '기본 방문 순서: ${c.baseRoute(route.baseRouteId).passengerIds.map((id) => displayName(c.passenger(id).name)).join(' → ')}',
                   style: const TextStyle(color: Colors.black54),
                 ),
               ],
@@ -700,13 +635,14 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${c.staff(route.staffId).name} → ${c.staff(target).name} · 담당 직원 변경 완료. 전체 직원 변경 검토·확정이 필요합니다.',
+            '${displayName(c.staff(route.staffId).name)} → ${displayName(c.staff(target).name)} · 담당 직원을 바꿨습니다. 내용을 확인하고 일정을 확정해 주세요.',
           ),
         ),
       );
     } on StateError catch (error) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(easyScheduleMessage(error.message))),
+      );
     }
   }
 
@@ -743,115 +679,24 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
     c.movePassenger(passengerId, target);
   }
 
-  Future<void> _keepTimes(RouteAssignment route) async {
+  Future<void> _editTime(
+    RouteAssignment route, {
+    required String passengerId,
+  }) async {
+    if (c.period != TransportPeriod.morning) return;
     final snapshot = c.draft;
-    final revision = c.absenceRevisionKey;
-    final warnings = visitTimeWarnings(route, route.estimatedVisitMinutes);
-    final missing = route.passengerIds
-        .where((id) => !route.estimatedVisitMinutes.containsKey(id))
-        .length;
-    final approved = await showDialog<bool>(
-      context: context,
-      useRootNavigator: false,
-      builder: (context) => AlertDialog(
-        title: const Text('기존 방문 시간 확인'),
-        content: SizedBox(
-          width: 480,
-          height: 300,
-          child: ListView(
-            children: [
-              Text(
-                '${dateKey(snapshot.date)} · ${snapshot.period.label} · ${c.baseRoute(route.baseRouteId).name}',
-              ),
-              const Text('변경된 방문 순서의 기존 시각을 확인해 주세요. 실제 운행 시각이 아닌 예상 시각입니다.'),
-              for (final id in route.passengerIds)
-                Text(
-                  '${c.passenger(id).name} · ${minuteLabel(route.estimatedVisitMinutes[id])}',
-                ),
-              if (missing > 0) Text('예상 시각 미입력 $missing명: 유지하면 미입력 상태로 남습니다.'),
-              if (route.passengerIds.isEmpty) const Text('방문 이용자가 없는 코스입니다.'),
-              for (final warning in warnings)
-                Text(easyScheduleMessage(warning)),
-              if (warnings.isNotEmpty) const Text('방문 시간을 다시 맞춘 뒤 확인해 주세요.'),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('취소'),
-          ),
-          FilledButton(
-            key: const Key('approve-keep-times'),
-            onPressed: warnings.isEmpty
-                ? () => Navigator.pop(context, true)
-                : null,
-            child: const Text('검토 완료 · 기존 시간 그대로 쓰기'),
-          ),
-        ],
-      ),
-    );
-    if (approved != true || !mounted) return;
-    try {
-      if (revision != c.absenceRevisionKey) {
-        throw StateError('결근 상태가 변경되었습니다. 다시 검토해 주세요.');
-      }
-      c.keepVisitTimes(route.baseRouteId, expectedSnapshot: snapshot);
-    } on StateError catch (error) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error.message)));
-    }
-  }
-
-  Future<void> _bulkTimes(RouteAssignment route) async {
-    final snapshot = c.draft;
-    final catalog = c.catalog;
-    final revision = c.absenceRevisionKey;
-    final result = await showDialog<VisitTimeApplication>(
-      context: context,
-      useRootNavigator: false,
-      builder: (_) => BulkVisitTimeDialog(
-        catalog: catalog,
-        snapshot: snapshot,
-        routeId: route.baseRouteId,
-      ),
-    );
-    if (result == null || !mounted) return;
-    if (c.busy ||
-        c.loading ||
-        c.dataError != null ||
-        c.availabilityLoading ||
-        c.availabilityError != null ||
-        c.conflict ||
-        !identical(snapshot, c.draft) ||
-        !identical(catalog, c.catalog) ||
-        revision != c.absenceRevisionKey) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('일정 또는 결근 상태가 변경되었습니다. 최신 방문 순서로 다시 계산해 주세요.'),
-        ),
-      );
-      return;
-    }
-    c.applyVisitTimePreview(
-      result.preview,
-      manualOverwriteConfirmed: result.manualOverwriteConfirmed,
-    );
-  }
-
-  Future<void> _editTime(RouteAssignment route, {String? passengerId}) async {
-    final snapshot = c.draft;
+    final minute = route.estimatedVisitMinutes[passengerId];
+    final manual = route.estimatedVisitSources[passengerId] == 'manual';
     final result = await showDialog<List<int?>>(
       context: context,
       useRootNavigator: false,
       builder: (_) => EstimatedTimeDialog(
-        title: passengerId == null
-            ? '예상 운행 시간 수정'
-            : '${c.passenger(passengerId).name} 예상 방문 시각',
-        labels: passengerId == null ? ['예상 출발', '예상 종료'] : ['예상 방문'],
-        minutes: passengerId == null
-            ? [route.startMinute, route.endMinute]
-            : [route.estimatedVisitMinutes[passengerId]],
+        title: '${displayName(c.passenger(passengerId).name)} 약속 시간',
+        labels: const ['약속 시간(선택)'],
+        guidance: minute != null && !manual
+            ? '이전 기록 ${minuteLabel(minute)}은 약속 여부를 확인해야 합니다. 약속한 시간을 직접 입력해 주세요.'
+            : '약속한 시간을 입력하세요. 비우고 저장하면 약속 시간이 지워집니다.',
+        minutes: [manual ? minute : null],
       ),
     );
     if (result == null ||
@@ -859,16 +704,15 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
         !identical(snapshot, c.draft) ||
         c.busy ||
         c.loading ||
+        c.conflict ||
         c.dataError != null ||
         c.availabilityLoading ||
         c.availabilityError != null) {
       return;
     }
-    if (passengerId == null) {
-      c.setOperatingWindow(route.baseRouteId, result[0], result[1]);
-    } else {
-      c.setVisitMinute(route.baseRouteId, passengerId, result[0]);
-    }
+    // A blank legacy/reference field is not an instruction to erase that record.
+    if (!manual && result[0] == null) return;
+    c.setVisitMinute(route.baseRouteId, passengerId, result[0]);
   }
 
   Future<void> _editAbsence(String staffId) async {
@@ -881,7 +725,7 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
       builder: (context) => StatefulBuilder(
         builder: (context, change) => AlertDialog(
           scrollable: true,
-          title: Text('${c.staff(staffId).name} · $day 결근'),
+          title: Text('${displayName(c.staff(staffId).name)} · $day 결근'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -901,9 +745,7 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
                 onSelectionChanged: (v) => change(() => scope = v.single),
               ),
               const SizedBox(height: 12),
-              const Text(
-                '선택한 날짜에만 적용됩니다. 담당 코스가 남으면 다른 직원 배정 필요로 표시되며, 일정은 자동으로 수정·확정되지 않습니다.',
-              ),
+              const Text('선택한 날짜에만 적용됩니다. 담당 코스는 다른 직원에게 넘긴 뒤 일정을 확정해 주세요.'),
             ],
           ),
           actions: [
@@ -964,7 +806,8 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
               .where(
                 (person) =>
                     !route.passengerIds.contains(person.id) &&
-                    person.name.contains(query.trim()) &&
+                    displayName(person.name)
+                        .contains(displayName(query.trim())) &&
                     c.catalog.baseRoutes
                         .where((r) => r.period == c.period)
                         .any((r) => r.passengerIds.contains(person.id)),
@@ -982,9 +825,7 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
                     onChanged: (value) => setDialogState(() => query = value),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    '다른 직원의 이용자를 선택하면 해당 배정에서 이동합니다. 예상 방문 시각은 다시 입력해 주세요.',
-                  ),
+                  const Text('다른 직원의 이용자를 선택하면 이 코스로 옮깁니다.'),
                   Expanded(
                     child: candidates.isEmpty
                         ? const Center(child: Text('추가할 이용자가 없습니다.'))
@@ -996,13 +837,13 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
                                 (r) => r.passengerIds.contains(person.id),
                               );
                               final status = sources.isNotEmpty
-                                  ? '${c.staff(sources.first.staffId).name}에게서 이동'
+                                  ? '${displayName(c.staff(sources.first.staffId).name)}에게서 이동'
                                   : c.draft.absentIds.contains(person.id)
                                   ? '결석 복귀'
                                   : '제외 복귀';
                               return ListTile(
                                 key: ValueKey('add-person-${person.id}'),
-                                title: Text(person.name),
+                                title: Text(displayName(person.name)),
                                 subtitle: Text(status),
                                 onTap: () => Navigator.pop(context, person.id),
                               );

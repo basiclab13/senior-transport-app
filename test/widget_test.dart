@@ -34,9 +34,23 @@ void main() {
       120,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('dashboard-staff-s1')).hitTestable(),
+      findsOneWidget,
+    );
     await tester.tap(find.byKey(const ValueKey('dashboard-staff-s1')));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const ValueKey('visit-p2')));
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('visit-p2')),
+      100,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('staff-detail-s1')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('visit-p2')));
     await tester.pumpAndSettle();
@@ -46,7 +60,7 @@ void main() {
     await tester.tap(absent);
     await tester.pumpAndSettle();
     expect(c.draft.routes.first.passengerIds, ['p1', 'p3']);
-    keepReviewedTimes(c);
+
     await tester.pumpAndSettle();
     final confirm = find.byKey(const Key('confirm-schedule'));
     await tester.scrollUntilVisible(

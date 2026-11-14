@@ -22,6 +22,7 @@
                                                }
                                   }
                 },
+    "storage": { "rules": "storage.rules" },
     "firestore":  {
                       "rules":  "firestore.rules"
                   },
@@ -68,6 +69,7 @@
         "predeploy": ["node tools/verify-hosting-build.cjs"]
     },
     "emulators":  {
+                      "storage": { "host": "127.0.0.1", "port": 9199 },
                       "hosting": {
                                      "host": "127.0.0.1",
                                      "port": 5000

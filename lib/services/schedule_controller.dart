@@ -13,8 +13,6 @@ import 'schedule_selection_policy.dart';
 import '../models/staff_absence.dart';
 import 'staff_availability_diagnostics.dart';
 import '../models/course_reassignment.dart';
-import 'visit_time_calculator.dart';
-import '../models/visit_time_review.dart';
 import '../models/ai_schedule_suggestion.dart';
 import '../models/schedule_codec.dart';
 import '../models/schedule_changes.dart';
@@ -84,6 +82,10 @@ class ScheduleController extends ChangeNotifier {
   String? absenceError;
   Map<String, dynamic>? _pendingAbsence;
   bool get supportsAbsences => _repository is StaffAvailabilityRepository;
+  bool get isCatalogPreview => _repository is CatalogPreviewScope;
+  Set<String> get previewReserveStaffIds => _repository is CatalogPreviewScope
+      ? (_repository as CatalogPreviewScope).reserveStaffIds
+      : const {};
   bool get busy => saving || absenceSaving;
   bool isStaffAbsent(String id) =>
       absences[id]?.periods.contains(period) ?? false;
@@ -148,7 +150,7 @@ class ScheduleController extends ChangeNotifier {
   Future<AiScheduleSuggestion> requestAiSuggestion() async {
     _requireAdmin();
     if (!supportsAiSuggestions || suggesting || conflict) {
-      throw StateError('Emulator 연결과 최신 일정 상태를 확인해 주세요.');
+      throw StateError('AI 사용 설정과 최신 일정 상태를 확인해 주세요.');
     }
     final origin = draft;
     final baseline = confirmed;
@@ -163,12 +165,29 @@ class ScheduleController extends ChangeNotifier {
             ...scheduleToJson(origin),
             'catalogVersion': originalCatalog.version,
             'expectedVersion': baseline?.version ?? 0,
-            'requestId': 'ai-suggestion',
+            'requestId': List.generate(
+              16,
+              (_) => Random.secure()
+                  .nextInt(256)
+                  .toRadixString(16)
+                  .padLeft(2, '0'),
+            ).join(),
             'expectedAvailabilityVersions': {
               for (final s in originalCatalog.staff)
                 s.id: absences[s.id]?.version ?? 0,
             },
+            if (isCatalogPreview)
+              'previewContext':
+                  (_repository as CatalogPreviewScope).previewContext,
           });
+      if (isCatalogPreview &&
+          (result['previewContext'] is! Map ||
+              !mapEquals(
+                Map<String, dynamic>.from(result['previewContext'] as Map),
+                (_repository as CatalogPreviewScope).previewContext,
+              ))) {
+        throw const FormatException('추천 테스트 문맥이 일치하지 않습니다.');
+      }
       final suggestion = AiScheduleSuggestion.fromJson(
         result,
         origin: origin,
@@ -187,15 +206,17 @@ class ScheduleController extends ChangeNotifier {
     } on FirebaseFunctionsException catch (error) {
       throw StateError(switch (error.code) {
         'aborted' => '추천 중 일정 또는 결근 상태가 변경되었습니다. 다시 요청해 주세요.',
-        'permission-denied' => '관리자만 AI 일정 제안을 사용할 수 있습니다.',
+        'permission-denied' => '승인된 관리자와 가상 일정만 AI 추천을 사용할 수 있습니다.',
         'failed-precondition' =>
-          'Emulator 가상 데이터와 서버의 GEMINI_API_KEY·GEMINI_MODEL 설정을 확인해 주세요.',
+          'AI가 비활성 상태이거나 서버 설정 확인이 필요합니다. 관리자에게 문의해 주세요.',
+        'already-exists' => '이미 접수한 요청입니다. 결과를 확인한 뒤 새 요청으로 다시 시도해 주세요.',
         'invalid-argument' =>
           error.details is Map &&
                   error.details['violation'] == 'REASSIGNMENT_NOT_JUSTIFIED'
               ? '코스를 옮길 만큼 추가 이득이 확인되지 않았습니다. 기존 코스를 유지해 다시 제안받거나 방문 순서만 조정해 주세요.'
               : 'AI 추천안이 업무 규칙을 충족하지 못했습니다. 기존 일정은 유지됩니다.',
-        'resource-exhausted' => 'Gemini 사용 한도를 확인하고 잠시 후 다시 요청해 주세요.',
+        'resource-exhausted' =>
+          'AI 사용 한도에 도달했거나 다른 요청이 진행 중입니다. 잠시 후 다시 시도해 주세요.',
         _ => 'AI 요청에 실패했습니다. 네트워크와 서버 API 설정을 확인해 주세요. 기존 일정은 유지됩니다.',
       });
     } on FormatException {
@@ -235,6 +256,11 @@ class ScheduleController extends ChangeNotifier {
     int expectedVersion,
   ) async {
     _requireAdmin();
+    if (isCatalogPreview) {
+      absenceError = '결근은 테스트 상황 선택으로만 재현하며 저장하지 않습니다.';
+      notifyListeners();
+      return false;
+    }
     if (!supportsAbsences || periods.isEmpty) {
       throw StateError('결근 저장소 연결과 시간대를 확인해 주세요.');
     }
@@ -447,7 +473,19 @@ class ScheduleController extends ChangeNotifier {
         _confirmed[key] = view.confirmed!;
       }
       _drafts.remove(key);
-      if (view.confirmed != null) {
+      if (view.previewDraft != null) {
+        final preview = view.previewDraft!;
+        if (!isCatalogPreview ||
+            view.confirmed != null ||
+            preview.version != 0 ||
+            preview.confirmedAt != null ||
+            dateKey(preview.date) != dateKey(selectedDate) ||
+            preview.period != period ||
+            validate(preview, checkAbsences: false).isNotEmpty) {
+          throw const FormatException('Invalid catalog preview');
+        }
+        _drafts[key] = preview;
+      } else if (view.confirmed != null) {
         _drafts[key] = view.confirmed!;
       } else if (role == UserRole.admin) {
         _ensureDraft();
@@ -459,7 +497,6 @@ class ScheduleController extends ChangeNotifier {
         );
       }
       _dirty.remove(key);
-      _timeReviews.remove(key);
       _removedVisitEstimates.remove(key);
       conflict = false;
     }
@@ -501,6 +538,11 @@ class ScheduleController extends ChangeNotifier {
 
   Future<bool> publish() async {
     _requireAdmin();
+    if (isCatalogPreview) {
+      saveError = '테스트 화면에서는 실제 일정을 확정할 수 없습니다.';
+      notifyListeners();
+      return false;
+    }
     if (_repository == null) {
       confirm();
       return true;
@@ -601,7 +643,7 @@ class ScheduleController extends ChangeNotifier {
                 FirebaseFunctionsException(code: 'permission-denied') =>
                   '일정 저장 권한이 없습니다. 관리자 계정과 활성 상태를 확인해 주세요.',
                 FirebaseFunctionsException(code: 'invalid-argument') =>
-                  '서버 일정 검증에 실패했습니다. 근무·정원·중복 배정·예상 시각을 확인해 주세요.',
+                  '서버 일정 검증에 실패했습니다. 근무·정원·중복 배정·입력 형식을 확인해 주세요.',
                 FirebaseFunctionsException(
                   code: 'failed-precondition',
                   details: final details,
@@ -641,28 +683,11 @@ class ScheduleController extends ChangeNotifier {
   final Map<String, ScheduleSnapshot> _drafts = {};
   final Map<String, ScheduleSnapshot> _confirmed = {};
   final Set<String> _dirty = {};
-  // Local workflow state belongs to the same date/period draft. Never serialize
-  // it as proof of authorization or as a server validation exemption.
-  final Map<String, Map<String, VisitTimeReview>> _timeReviews = {};
   // Restore values excluded in this unconfirmed draft without silently losing
   // a manual/legacy estimate. Confirm/reload discards this temporary history.
   final Map<String, Map<String, ({int minute, String? source})>>
   _removedVisitEstimates = {};
-  Map<String, VisitTimeReview> get timeReviews =>
-      Map.unmodifiable(_timeReviews[_currentKey] ?? {});
-  Set<String> get pendingTimeReviewRouteIds => Set.unmodifiable(
-    timeReviews.entries
-        .where((e) => e.value.decision == VisitTimeReviewDecision.pending)
-        .map((e) => e.key),
-  );
-  List<String> get timeReviewErrors => [
-    for (final id in pendingTimeReviewRouteIds)
-      '${baseRoute(id).name}: 예상 시각 재검토 필요. 계산 결과 적용 또는 기존 시각 유지를 선택해 주세요.',
-  ];
-  List<String> get confirmationErrors => [
-    ...validationErrors,
-    ...timeReviewErrors,
-  ];
+  List<String> get confirmationErrors => validationErrors;
 
   String _key(DateTime date, TransportPeriod period) =>
       '${dateKey(date)}/${period.name}';
@@ -739,82 +764,10 @@ class ScheduleController extends ChangeNotifier {
     }
   }
 
-  void _update(
-    ScheduleSnapshot snapshot, {
-    Set<String> timeReviewedRoutes = const {},
-  }) {
+  void _update(ScheduleSnapshot snapshot) {
     _requireAdmin();
-    final reviews = _timeReviews.putIfAbsent(_currentKey, () => {});
-    for (final next in snapshot.routes) {
-      final old = draft.routes
-          .where((r) => r.baseRouteId == next.baseRouteId)
-          .firstOrNull;
-      if (old == null) continue;
-      final reasons = <String>{};
-      if (!listEquals(old.passengerIds, next.passengerIds)) {
-        if (setEquals(old.passengerIds.toSet(), next.passengerIds.toSet())) {
-          reasons.add('방문 순서 변경');
-        } else {
-          if (next.passengerIds.any((id) => !old.passengerIds.contains(id))) {
-            reasons.add('이용자 추가·복귀·도착');
-          }
-          if (old.passengerIds.any((id) => !next.passengerIds.contains(id))) {
-            reasons.add('이용자 제외·결석·출발');
-          }
-        }
-      }
-      if (old.staffId != next.staffId) reasons.add('담당 직원 변경·코스 인계');
-      final previous = reviews[next.baseRouteId];
-      if (previous != null &&
-          (!mapEquals(old.estimatedVisitMinutes, next.estimatedVisitMinutes) ||
-              !mapEquals(
-                old.estimatedVisitSources,
-                next.estimatedVisitSources,
-              ) ||
-              old.startMinute != next.startMinute ||
-              old.endMinute != next.endMinute)) {
-        reasons.add('시각·운행 구간 변경');
-      }
-      if (reasons.isNotEmpty) {
-        reviews[next.baseRouteId] = VisitTimeReview(
-          VisitTimeReviewDecision.pending,
-          {
-            if (previous?.decision == VisitTimeReviewDecision.pending)
-              ...previous!.reasons,
-            ...reasons,
-          },
-        );
-      }
-    }
     _drafts[_currentKey] = snapshot;
     _dirty.add(_currentKey);
-    for (final id in timeReviewedRoutes) {
-      final review = reviews[id];
-      if (review != null) {
-        reviews[id] = VisitTimeReview(
-          VisitTimeReviewDecision.applied,
-          review.reasons,
-        );
-      }
-    }
-    notifyListeners();
-  }
-
-  void keepVisitTimes(String routeId, {ScheduleSnapshot? expectedSnapshot}) {
-    _requireAdmin();
-    if (conflict ||
-        (expectedSnapshot != null && !identical(draft, expectedSnapshot))) {
-      throw StateError('일정이 변경되었습니다. 최신 시각을 다시 검토해 주세요.');
-    }
-    final route = draft.routes.firstWhere((r) => r.baseRouteId == routeId);
-    final warnings = visitTimeWarnings(route, route.estimatedVisitMinutes);
-    if (warnings.isNotEmpty) throw StateError(warnings.join('\n'));
-    final review = _timeReviews[_currentKey]?[routeId];
-    if (review == null) return;
-    _timeReviews[_currentKey]![routeId] = VisitTimeReview(
-      VisitTimeReviewDecision.kept,
-      review.reasons,
-    );
     notifyListeners();
   }
 
@@ -873,7 +826,7 @@ class ScheduleController extends ChangeNotifier {
   }
 
   /// Add/restore an existing passenger, or move them atomically from another
-  /// staff member. Existing estimates move unchanged and require review.
+  /// staff member. Existing time values and provenance move unchanged.
   void addPassenger(String passengerId, String targetRouteId) {
     _requireAdmin();
     passenger(passengerId);
@@ -930,6 +883,12 @@ class ScheduleController extends ChangeNotifier {
 
   void setVisitMinute(String routeId, String passengerId, int? minute) {
     _requireAdmin();
+    if (period != TransportPeriod.morning) {
+      throw StateError('약속 시간은 오전에만 입력할 수 있습니다.');
+    }
+    if (minute != null && (minute < 0 || minute >= 1440)) {
+      throw ArgumentError('약속 시간을 HH:mm 형식으로 입력해 주세요.');
+    }
     final route = draft.routes.firstWhere((r) => r.baseRouteId == routeId);
     if (!route.passengerIds.contains(passengerId)) {
       throw StateError('현재 코스의 이용자만 시각을 입력할 수 있습니다.');
@@ -946,139 +905,8 @@ class ScheduleController extends ChangeNotifier {
     );
   }
 
-  void applyVisitTimePreview(
-    VisitTimePreview preview, {
-    bool manualOverwriteConfirmed = false,
-  }) {
-    _requireAdmin();
-    if (conflict || !identical(draft, preview.snapshot)) {
-      throw StateError('일정이 변경되었습니다. 최신 방문 순서로 다시 계산해 주세요.');
-    }
-    if (preview.warnings.isNotEmpty) throw StateError('시각 충돌을 해결한 뒤 적용해 주세요.');
-    final manualChanges = preview.route.passengerIds.where(
-      (id) =>
-          preview.route.isManualEstimate(id) &&
-          preview.route.estimatedVisitMinutes[id] != preview.result[id],
-    );
-    if (manualChanges.isNotEmpty && !manualOverwriteConfirmed) {
-      throw StateError('수동 시각 변경을 별도로 확인해야 합니다.');
-    }
-    if (mapEquals(preview.route.estimatedVisitMinutes, preview.result) &&
-        preview.route.passengerIds.every(
-          (id) =>
-              (preview.route.estimatedVisitSources[id] ?? 'manual') ==
-              (preview.sources[id] ?? 'manual'),
-        )) {
-      final review = _timeReviews[_currentKey]?[preview.route.baseRouteId];
-      if (review != null) {
-        _timeReviews[_currentKey]![preview.route.baseRouteId] = VisitTimeReview(
-          VisitTimeReviewDecision.applied,
-          review.reasons,
-        );
-        notifyListeners();
-      }
-      return;
-    }
-    _replaceRoute(
-      preview.route.copyWith(
-        estimatedVisitMinutes: preview.result,
-        estimatedVisitSources: preview.sources,
-      ),
-      timeReviewed: true,
-    );
-  }
-
-  VisitTimeBatchReview prepareVisitTimeBatch(
-    Map<String, int> firstMinutes,
-    int intervalMinutes,
-  ) {
-    _requireAdmin();
-    if (intervalMinutes <= 0) throw ArgumentError('방문 간격을 1분 이상으로 입력해 주세요.');
-    if (conflict || pendingTimeReviewRouteIds.isEmpty) {
-      throw StateError('일정이 바뀌었습니다. 화면의 방문 시간을 다시 확인해 주세요.');
-    }
-    final ids = Set<String>.unmodifiable(pendingTimeReviewRouteIds);
-    final previews = <VisitTimePreview>[];
-    for (final r in draft.routes.where((r) => ids.contains(r.baseRouteId))) {
-      if (r.passengerIds.isEmpty) continue;
-      final first = firstMinutes[r.baseRouteId];
-      if (first == null) {
-        throw StateError('${baseRoute(r.baseRouteId).name}의 첫 방문 시간을 입력해 주세요.');
-      }
-      previews.add(
-        previewVisitTimes(
-          draft,
-          r.baseRouteId,
-          first,
-          intervalMinutes,
-          replaceManual: true,
-        ),
-      );
-    }
-    return VisitTimeBatchReview._(
-      draft,
-      catalog,
-      absenceRevisionKey,
-      _generation,
-      ids,
-      previews,
-    );
-  }
-
-  bool isVisitTimeBatchCurrent(VisitTimeBatchReview review) =>
-      !_disposed &&
-      !busy &&
-      !loading &&
-      !conflict &&
-      dataError == null &&
-      !availabilityLoading &&
-      availabilityError == null &&
-      identical(review.snapshot, draft) &&
-      identical(review.catalog, catalog) &&
-      review.absenceRevision == absenceRevisionKey &&
-      review.generation == _generation &&
-      setEquals(review.routeIds, pendingTimeReviewRouteIds);
-
-  void applyVisitTimeBatch(
-    VisitTimeBatchReview review, {
-    bool manualOverwriteConfirmed = false,
-  }) {
-    _requireAdmin();
-    if (!isVisitTimeBatchCurrent(review)) {
-      throw StateError('확인하는 동안 일정이나 결근 상태가 바뀌었습니다. 방문 시간을 다시 맞춰 주세요.');
-    }
-    if (review.previews.any((p) => p.warnings.isNotEmpty)) {
-      throw StateError('첫 방문 시간을 앞당기거나 방문 간격을 줄인 뒤 다시 확인해 주세요.');
-    }
-    if (review.manualChanges > 0 && !manualOverwriteConfirmed) {
-      throw StateError('직접 입력한 시간이 바뀝니다. 변경 내용을 확인해 주세요.');
-    }
-    final updated = {
-      for (final p in review.previews)
-        p.route.baseRouteId: p.route.copyWith(
-          estimatedVisitMinutes: p.result,
-          estimatedVisitSources: {
-            for (final id in p.route.passengerIds)
-              if (p.route.estimatedVisitMinutes[id] != p.result[id])
-                id: p.sources[id]!
-              else if (p.route.estimatedVisitSources.containsKey(id))
-                id: p.route.estimatedVisitSources[id]!,
-          },
-        ),
-    };
-    _update(
-      draft.copyWith(
-        routes: [for (final r in draft.routes) updated[r.baseRouteId] ?? r],
-      ),
-      timeReviewedRoutes: review.routeIds,
-    );
-  }
-
   void setOperatingWindow(String routeId, int? start, int? end) {
     _requireAdmin();
-    if ((start == null) != (end == null)) {
-      throw StateError('예상 출발·종료 시각을 함께 입력해 주세요.');
-    }
     final route = draft.routes.firstWhere((r) => r.baseRouteId == routeId);
     _replaceRoute(
       route.copyWith(
@@ -1147,16 +975,14 @@ class ScheduleController extends ChangeNotifier {
     _replaceRoute(route.copyWith(staffId: targetStaffId));
   }
 
-  void _replaceRoute(RouteAssignment route, {bool timeReviewed = false}) =>
-      _update(
-        draft.copyWith(
-          routes: [
-            for (final r in draft.routes)
-              if (r.baseRouteId == route.baseRouteId) route else r,
-          ],
-        ),
-        timeReviewedRoutes: timeReviewed ? {route.baseRouteId} : const {},
-      );
+  void _replaceRoute(RouteAssignment route) => _update(
+    draft.copyWith(
+      routes: [
+        for (final r in draft.routes)
+          if (r.baseRouteId == route.baseRouteId) route else r,
+      ],
+    ),
+  );
 
   /// Demo routes overlap for the entire period; sequential reuse is out of scope.
   List<String> validate(
@@ -1187,37 +1013,26 @@ class ScheduleController extends ChangeNotifier {
       final start = r.startMinute;
       final end = r.endMinute;
       bool validMinute(int value) => value >= 0 && value < 24 * 60;
-      if ((start == null) != (end == null) ||
-          (start != null &&
-              end != null &&
-              (!validMinute(start) || !validMinute(end) || start >= end))) {
-        errors.add('$label: 예상 운행 시작·종료 시각을 확인해 주세요.');
+      if ((start != null && !validMinute(start)) ||
+          (end != null && !validMinute(end))) {
+        errors.add('$label: 저장된 운행 기록의 시간 형식을 확인해 주세요.');
       }
       if (r.estimatedVisitMinutes.keys.any(
         (id) => !r.passengerIds.contains(id),
       )) {
-        errors.add('$label: 배정되지 않은 이용자의 예상 시각이 남아 있습니다.');
+        errors.add('$label: 배정되지 않은 이용자의 시간 기록이 남아 있습니다.');
       }
       if (r.estimatedVisitSources.entries.any(
         (entry) =>
             !r.estimatedVisitMinutes.containsKey(entry.key) ||
             !['manual', 'fixedInterval'].contains(entry.value),
       )) {
-        errors.add('$label: 예상 시각 출처를 확인해 주세요.');
+        errors.add('$label: 시간 기록 형식을 확인해 주세요.');
       }
-      int? previous;
-      for (final id in r.passengerIds) {
-        final minute = r.estimatedVisitMinutes[id];
-        if (minute == null) continue;
-        if (!validMinute(minute) ||
-            (start != null && minute < start) ||
-            (end != null && minute > end)) {
-          errors.add('$label: 예상 방문 시각이 운행 시간 범위를 벗어났습니다.');
-        }
-        if (previous != null && minute <= previous) {
-          errors.add('$label: 방문 순서와 예상 방문 시각이 충돌합니다.');
-        }
-        previous = minute;
+      if (r.estimatedVisitMinutes.values.any(
+        (minute) => !validMinute(minute),
+      )) {
+        errors.add('$label: 약속 시간은 00:00부터 23:59 사이여야 합니다.');
       }
       if (bases.isEmpty) errors.add('$label: 기본 코스와 시간대를 확인해 주세요.');
       if (!routeIds.add(r.baseRouteId)) errors.add('$label: 코스가 중복되었습니다.');
@@ -1274,16 +1089,6 @@ class ScheduleController extends ChangeNotifier {
   List<RouteAssignment> routesForStaff(String id) =>
       draft.routes.where((route) => route.staffId == id).toList();
 
-  List<String> get planningWarnings => [
-    for (final route in draft.routes)
-      if (route.startMinute == null ||
-          route.endMinute == null ||
-          route.passengerIds.any(
-            (id) => !route.estimatedVisitMinutes.containsKey(id),
-          ))
-        '${staff(route.staffId).name} · ${baseRoute(route.baseRouteId).name}: 예상 시각이 미입력된 항목이 있습니다.',
-  ];
-
   void confirm() {
     if (_repository != null) throw StateError('서버 일정은 publish를 통해 확정해야 합니다.');
     _requireAdmin();
@@ -1296,39 +1101,10 @@ class ScheduleController extends ChangeNotifier {
     _confirmed[_currentKey] = snapshot;
     _drafts[_currentKey] = snapshot;
     _dirty.remove(_currentKey);
-    _timeReviews.remove(_currentKey);
     _removedVisitEstimates.remove(_currentKey);
     notifyListeners();
   }
 
   List<RouteAssignment> get staffRoutes =>
       confirmed?.routes.where((r) => r.staffId == staffId).toList() ?? [];
-}
-
-/// A single immutable review for all changed courses of one date/period.
-class VisitTimeBatchReview {
-  VisitTimeBatchReview._(
-    this.snapshot,
-    this.catalog,
-    this.absenceRevision,
-    this.generation,
-    this.routeIds,
-    List<VisitTimePreview> previews,
-  ) : previews = List.unmodifiable(previews);
-  final ScheduleSnapshot snapshot;
-  final ScheduleCatalog catalog;
-  final String absenceRevision;
-  final int generation;
-  final Set<String> routeIds;
-  final List<VisitTimePreview> previews;
-  int get manualChanges =>
-      previews.fold(0, (sum, p) => sum + p.manualChanges.length);
-  int get changedTimes => previews.fold(
-    0,
-    (sum, p) =>
-        sum +
-        p.route.passengerIds
-            .where((id) => p.route.estimatedVisitMinutes[id] != p.result[id])
-            .length,
-  );
 }

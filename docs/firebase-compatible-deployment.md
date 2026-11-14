@@ -2,6 +2,8 @@
 
 대상: `senior-transport-app`. 로컬 수정일: 2026-11-14.
 
+후속 구현: 운영 AI 제한 테스트가 추가되어 현재 manifest는 세 함수와 AI 전용 Secret을 포함한다. 아래의 두 함수·파라미터 0개 검사 결과는 당시 일정 전용 배포 기준이다. 현재 AI 설정·선택 배포와 안전 검사는 [운영 AI 로컬 준비](production-ai-local-preparation.md)를 따른다. 기존 두 함수와 Rules는 이 후속 작업에서도 변경하지 않았다.
+
 ## 구현 범위
 
 - `functions/index.js`: 운영에서는 기존 이름·리전·인스턴스 설정의 `confirmSchedule`, `setStaffAbsence`만 export한다. `FUNCTIONS_EMULATOR === 'true'` **및** `GCLOUD_PROJECT === 'demo-senior-transport'`일 때만 AI 모듈을 로드한다. 운영 함수 검색 시 AI 코드·Gemini 파라미터·Secret 선언을 로드하지 않는다.

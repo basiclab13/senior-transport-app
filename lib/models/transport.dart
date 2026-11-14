@@ -83,12 +83,13 @@ class RouteAssignment {
   final String vehicleId;
   final List<String> passengerIds;
 
-  // Expected local wall-clock minutes for this date, never GPS observations.
+  // Legacy field name: optional AM appointments or retained historical values.
+  // Wall-clock minutes for this date, never GPS observations.
   final Map<String, int> estimatedVisitMinutes;
   final Map<String, String> estimatedVisitSources;
   bool isManualEstimate(String passengerId) =>
       estimatedVisitMinutes.containsKey(passengerId) &&
-      estimatedVisitSources[passengerId] != 'fixedInterval';
+      estimatedVisitSources[passengerId] == 'manual';
   final int? startMinute;
   final int? endMinute;
 

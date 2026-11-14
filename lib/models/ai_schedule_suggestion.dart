@@ -69,6 +69,19 @@ class AiScheduleSuggestion {
       ],
     );
   }
+  bool get needsAppointmentNotice =>
+      origin.period == TransportPeriod.morning &&
+      candidate.routes.any((next) {
+        final old = origin.routes.firstWhere(
+          (r) => r.baseRouteId == next.baseRouteId,
+        );
+        return old.passengerIds.length != next.passengerIds.length ||
+            List.generate(
+              old.passengerIds.length,
+              (i) => i,
+            ).any((i) => old.passengerIds[i] != next.passengerIds[i]);
+      });
+
   final ScheduleSnapshot origin;
   final ScheduleSnapshot? confirmed;
   final ScheduleCatalog catalog;

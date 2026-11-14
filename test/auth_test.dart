@@ -282,7 +282,7 @@ void main() {
     expect(logs, contains('[auth] profile failed code=invalidStaffMapping'));
     expect(auth.signedIn, isTrue);
     expect(auth.user, isNull);
-    expect(find.textContaining('staffId가 없거나 유효하지'), findsOneWidget);
+    expect(find.textContaining('담당 직원 정보가 연결되지'), findsOneWidget);
     expect(find.text('내 송영 일정'), findsNothing);
     repository.profiles.add(
       AppUser.fromDocument('fictional-user', {...document, 'staffId': 's1'}),
@@ -311,7 +311,7 @@ void main() {
     expect(auth.user, isNull);
     expect(logs, contains('[auth] profile failed code=permission-denied'));
     expect(logs.any((line) => line.contains('authentication failed')), isFalse);
-    expect(find.textContaining('조회가 거부'), findsOneWidget);
+    expect(find.textContaining('관리자에게 권한 확인'), findsOneWidget);
     expect(find.text('내 송영 일정'), findsNothing);
   });
 
@@ -398,7 +398,7 @@ void main() {
       const UserProfileException(UserProfileFailure.missingDocument),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('문서가 없습니다'), findsOneWidget);
+    expect(find.textContaining('계정 설정을 확인'), findsOneWidget);
     expect(find.text('송영 현황'), findsNothing);
     await tester.tap(find.text('다시 확인'));
     await tester.pump();
@@ -425,7 +425,7 @@ void main() {
       const UserProfileException(UserProfileFailure.missingActive),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('active 필드가 없습니다'), findsOneWidget);
+    expect(find.textContaining('계정 설정을 확인'), findsOneWidget);
     expect(find.text('송영 현황'), findsNothing);
     repository.profiles.add(
       AppUser.fromDocument('fictional-admin-uid', {
@@ -447,10 +447,10 @@ void main() {
     await tester.pump();
     repository.profiles.add(staff);
     await tester.pumpAndSettle();
-    expect(find.text('사진 등록은 Emulator 시연 환경에서 사용할 수 있습니다.'), findsOneWidget);
+    expect(find.text('사진 등록을 사용할 수 없습니다. 관리자에게 문의해 주세요.'), findsOneWidget);
     repository.sessions.add(null);
     await tester.pumpAndSettle();
-    expect(find.text('사진 등록은 Emulator 시연 환경에서 사용할 수 있습니다.'), findsNothing);
+    expect(find.text('사진 등록을 사용할 수 없습니다. 관리자에게 문의해 주세요.'), findsNothing);
     expect(find.byKey(const Key('login')), findsOneWidget);
   });
 }

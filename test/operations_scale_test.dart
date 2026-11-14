@@ -78,7 +78,7 @@ void main() {
         '가상 이용자 80',
       );
       await tester.pumpAndSettle();
-      expect(find.text('가상 이용자 80 · 미배정'), findsOneWidget);
+      expect(find.text('이용자 80 · 미배정'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -125,7 +125,7 @@ void main() {
       expect(find.byKey(const ValueKey('timeline-p1')), findsNothing);
       await tester.ensureVisible(find.byKey(const ValueKey('timeline-p80')));
       await tester.pumpAndSettle();
-      expect(find.text('가상 이용자 80'), findsOneWidget);
+      expect(find.text('이용자 80'), findsOneWidget);
       expect(find.byKey(const Key('staff-search')), findsNothing);
       c.selectPeriod(TransportPeriod.afternoon);
       await tester.pumpAndSettle();

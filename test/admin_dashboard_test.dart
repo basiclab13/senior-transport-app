@@ -14,7 +14,7 @@ import 'package:senior_transport_app/services/schedule_controller.dart';
 
 import 'admin_overview_test.dart' show operatingCatalog;
 import 'attendance_test.dart' show PhotoSchedules;
-import 'support/fixtures.dart' show fixtureClock, openStaffInfo;
+import 'support/fixtures.dart' show fixtureClock;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -137,15 +137,15 @@ void main() {
           );
           await tester.pumpAndSettle();
         }
-        expect(find.text('담당 직원 · 가상 직원 01'), findsOneWidget);
-        expect(find.text('담당 차량 · 가상 차량 1'), findsOneWidget);
+        expect(find.text('담당 직원 · 직원 01'), findsOneWidget);
+        expect(find.text('담당 차량 · 차량 1'), findsOneWidget);
         expect(find.byKey(const ValueKey('morning-1-staff-s1')), findsNothing);
         expect(
           find.byKey(const ValueKey('morning-1-vehicle-v1')),
           findsNothing,
         );
         expect(find.byKey(const ValueKey('operating-morning-1')), findsNothing);
-        expect(find.text('방문 순서 · 예상 방문 시각'), findsOneWidget);
+        expect(find.text('방문 순서 · 약속 시간'), findsOneWidget);
         await screenshot(tester, 'course-detail-${size.width.toInt()}');
         expect(tester.takeException(), isNull);
       },
@@ -161,7 +161,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('morning-1-staff-s1')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('가상 직원 02').last);
+      await tester.tap(find.text('직원 02').last);
       await tester.pumpAndSettle();
       final route = c.draft.routes.firstWhere(
         (r) => r.baseRouteId == 'morning-1',
@@ -176,7 +176,7 @@ void main() {
     },
   );
   testWidgets(
-    'additional settings preserve and edit the operating window without changing visit times',
+    'additional settings preserve legacy operating records without an editor',
     (tester) async {
       c.setOperatingWindow('morning-1', 480, 540);
       c.setVisitMinute('morning-1', 'p1', 490);
@@ -187,27 +187,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(settings);
       await tester.pumpAndSettle();
-      final operating = find.byKey(const ValueKey('operating-morning-1'));
-      await tester.ensureVisible(operating);
-      await tester.pumpAndSettle();
-      await tester.tap(operating);
-      await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<TextFormField>(
-              find.byKey(const ValueKey('estimated-time-0')),
-            )
-            .controller!
-            .text,
-        '08:00',
-      );
-      await tester.enterText(
-        find.byKey(const ValueKey('estimated-time-1')),
-        '09:30',
-      );
-      await tester.tap(find.byKey(const Key('save-estimated-time')));
-      await tester.pumpAndSettle();
-      expect(c.draft.routes.first.endMinute, 570);
+      expect(find.byKey(const ValueKey('operating-morning-1')), findsNothing);
+      expect(c.draft.routes.first.endMinute, 540);
       expect(c.draft.routes.first.estimatedVisitMinutes['p1'], 490);
       expect(c.confirmed, isNull);
     },
@@ -232,7 +213,7 @@ void main() {
       await tester.ensureVisible(vehicles);
       await tester.tap(vehicles);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('가상 차량 1 (6명)').last);
+      await tester.tap(find.text('차량 1 (6명)').last);
       await tester.pumpAndSettle();
       expect(
         c.draft.routes
@@ -250,31 +231,17 @@ void main() {
     },
   );
   testWidgets(
-    'operating error opens its editor directly without requiring additional settings',
+    'legacy operating records stay hidden and do not constrain confirmation',
     (tester) async {
       c.setOperatingWindow('morning-1', 600, 500);
       await openCourse(tester, const Size(390, 844));
-      final fix = find.byKey(const ValueKey('fix-operating-morning-1'));
-      await tester.ensureVisible(fix);
-      await tester.tap(fix);
-      await tester.pumpAndSettle();
-      expect(find.text('예상 운행 시간 수정'), findsOneWidget);
-      await tester.enterText(
-        find.byKey(const ValueKey('estimated-time-0')),
-        '08:00',
-      );
-      await tester.enterText(
-        find.byKey(const ValueKey('estimated-time-1')),
-        '09:30',
-      );
-      await tester.tap(find.byKey(const Key('save-estimated-time')));
-      await tester.pumpAndSettle();
-      expect(c.draft.routes.first.startMinute, 480);
-      expect(c.draft.routes.first.endMinute, 570);
       expect(
         find.byKey(const ValueKey('fix-operating-morning-1')),
         findsNothing,
       );
+      expect(c.confirmationErrors, isEmpty);
+      expect(c.draft.routes.first.startMinute, 600);
+      expect(c.draft.routes.first.endMinute, 500);
       expect(tester.takeException(), isNull);
     },
   );
@@ -327,7 +294,7 @@ void main() {
     },
   );
   testWidgets(
-    'absence, missing passengers and time review appear in priority order with correct destinations',
+    'absence and missing passengers keep their priority without time warnings',
     (tester) async {
       final full = operatingCatalog();
       c.dispose();
@@ -366,25 +333,18 @@ void main() {
       await open(tester);
       final absence = find.textContaining('다른 직원에게 코스를 넘겨주세요.');
       final missing = find.text('배정되지 않은 이용자 1명을 확인해 주세요.');
-      final time = find.text('가상 2코스: 방문 시간을 확인해 주세요.');
+
       expect(
         tester.getTopLeft(absence).dy,
         lessThan(tester.getTopLeft(missing).dy),
       );
-      expect(
-        tester.getTopLeft(missing).dy,
-        lessThan(tester.getTopLeft(time).dy),
-      );
-      expect(find.text('3건'), findsOneWidget);
+      expect(find.text('2건'), findsOneWidget);
       await screenshot(tester, 'pc-problems');
       await tester.tap(missing);
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('staff-detail-s20')), findsOneWidget);
       await tester.tap(find.byKey(const Key('admin-overview')));
       await tester.pumpAndSettle();
-      await tester.tap(time);
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('staff-detail-s2')), findsOneWidget);
       expect(
         tester
             .widget<FilledButton>(find.byKey(const Key('confirm-schedule')))
@@ -425,7 +385,7 @@ void main() {
     expect(find.byKey(const Key('confirm-schedule')), findsNothing);
     expect(find.text('다시 불러오기'), findsOneWidget);
   });
-  for (final width in [320.0, 390.0]) {
+  for (final width in [320.0, 390.0, 768.0]) {
     testWidgets(
       'mobile $width: summary, searchable last employee, editor and return',
       (tester) async {
@@ -486,8 +446,7 @@ void main() {
       c.markAbsent('p1');
       await tester.pumpAndSettle();
       final confirm = find.byKey(const Key('confirm-schedule'));
-      expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
-      c.keepVisitTimes('morning-1');
+      expect(tester.widget<FilledButton>(confirm).onPressed, isNotNull);
       await tester.pumpAndSettle();
       expect(tester.widget<FilledButton>(confirm).onPressed, isNotNull);
       await tester.tap(confirm);
@@ -526,7 +485,7 @@ void main() {
     },
   );
   testWidgets(
-    'staff photo actions stay in staff information; detail has no duplicate overview/search buttons',
+    'staff photos are inline; detail has no duplicate overview/search buttons',
     (tester) async {
       c.dispose();
       final repo = PhotoSchedules();
@@ -540,15 +499,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('open-assignment-overview')), findsNothing);
       expect(find.byKey(const Key('open-passenger-search')), findsNothing);
-      expect(find.byKey(const ValueKey('attendance-s1')), findsNothing);
+      expect(find.byKey(const ValueKey('attendance-s1')), findsOneWidget);
+      expect(find.text('업무 시작·종료 기록'), findsOneWidget);
+      expect(find.text('미등록'), findsNWidgets(2));
       expect(find.byKey(const ValueKey('visit-p1')), findsOneWidget);
       await screenshot(tester, 'readability-detail-pc');
-      await openStaffInfo(tester, 's1');
-      final records = find.byKey(const ValueKey('attendance-s1'));
-      await tester.ensureVisible(records);
-      await tester.tap(records);
-      await tester.pumpAndSettle();
-      expect(find.text('김다정 업무 사진 기록'), findsOneWidget);
+      expect(find.text('업무 시작·종료 기록 보기'), findsNothing);
       await tester.pumpWidget(const SizedBox());
       await repo.changes.close();
       await repo.attendance.updates.close();

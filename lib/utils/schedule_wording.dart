@@ -1,5 +1,12 @@
+import 'display_wording.dart';
+
 /// Translate validation feedback for the screen; the validation rules stay intact.
-String easyScheduleMessage(String message) => message
+String easyScheduleMessage(String message) =>
+    displayMessage(_plainMessage(message));
+
+String _plainMessage(String message) => message
+    .replaceAll('기본 데이터 버전', '기본 정보')
+    .replaceAll('확정 버전', '공유된 일정')
     .replaceAll(
       'AI 추천안이 업무 규칙을 충족하지 못했습니다.',
       'AI가 조건에 맞는 일정을 찾지 못했습니다. 결근 직원과 차량 정원을 확인하거나 직접 배정해 주세요.',
@@ -7,25 +14,6 @@ String easyScheduleMessage(String message) => message
     .replaceAll(
       'AI 추천안의 배정 검증에 실패했습니다.',
       '직원 근무 여부와 차량 정원을 확인한 뒤 다시 요청하거나 직접 배정해 주세요.',
-    )
-    .replaceAll(
-      '예상 시각 재검토 필요. 계산 결과 적용 또는 기존 시각 유지를 선택해 주세요.',
-      '방문 시간을 확인해 주세요. 위의 「변경된 방문 시간 맞추기」를 누르거나 직원별 화면에서 기존 시간을 확인해 주세요.',
-    )
-    .replaceAll(
-      '방문 순서와 예상 시각이 역전되거나 중복됩니다.',
-      '방문 시간이 방문 순서와 맞지 않습니다. 시간을 다시 맞춰 주세요.',
-    )
-    .replaceAll('방문 순서와 예상 방문 시각이 충돌합니다.', '방문 순서에 맞게 시간을 다시 맞춰 주세요.')
-    .replaceAll(
-      '방문 시각이 기존 예상 운행 시간 범위와 충돌합니다.',
-      '첫 방문 시간을 앞당기거나 방문 간격을 줄여 운행 시간 안에 맞춰 주세요.',
-    )
-    .replaceAll('예상 방문 시각이 운행 시간 범위를 벗어났습니다.', '첫 방문 시간을 앞당기거나 방문 간격을 줄여 주세요.')
-    .replaceAll('예상 시각 출처를 확인해 주세요.', '시간 정보를 다시 불러온 뒤 방문 시간을 다시 맞춰 주세요.')
-    .replaceAll(
-      '예상 운행 시작·종료 시각이 올바르지 않습니다.',
-      '직원별 화면에서 운행 시작과 종료 시간을 먼저 확인해 주세요.',
     )
     .replaceAll(
       '직원이 같은 시간대에 중복 배정되었습니다.',

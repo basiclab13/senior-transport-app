@@ -98,7 +98,7 @@ test('AI recommendation: read-only 20 staff / 80 passengers, fixed responses onl
       }}),'aborted');
       assert.equal((await before.ref.get()).data().version,2);
     });
-    await t.test('approved proposal needs time review before confirmation, then staff projection gets the result',async()=>{
+    await t.test('approved proposal preserves times through confirmation and own staff projection',async()=>{
       const day='2026-12-08';
       const draft=operationRequest(catalog,day,'morning','ai-v1',randomUUID());
       draft.expectedAvailabilityVersions=Object.fromEntries(catalog.staff.map(s=>[s.id,0]));
@@ -107,15 +107,10 @@ test('AI recommendation: read-only 20 staff / 80 passengers, fixed responses onl
       assert.ok(result.warnings.length>0);
       const merged=assembleSuggestion(draft,proposal,catalog,[]);
       const approved={...draft,routes:merged.routes};
-      await rejects(confirm(db,'admin',approved),'invalid-argument');
-      assert.equal((await db.doc(`schedules/${day}_morning`).get()).exists,false);
-      // The administrator's separate B-1/B-2 review supplies these new times.
-      const first=approved.routes[0];
-      first.estimatedVisitMinutes=Object.fromEntries(first.passengerIds.map((id,i)=>[id,535+5*i]));
-      first.estimatedVisitSources=Object.fromEntries(first.passengerIds.map(id=>[id,'fixedInterval']));
       assert.equal((await confirm(db,'admin',approved)).version,1);
       const own=(await db.doc(`staffSchedules/s1/days/${day}_morning`).get()).data();
-      assert.deepEqual(own.routes,[first]);
+      assert.deepEqual(own.routes,[approved.routes[0]]);
+      assert.deepEqual(own.routes[0].estimatedVisitMinutes,draft.routes[0].estimatedVisitMinutes);
       assert.equal(own.version,1);
       assert.equal((await db.doc(`schedules/${day}_afternoon`).get()).exists,false);
     });

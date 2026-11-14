@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../utils/display_wording.dart';
+
 import '../models/schedule_catalog.dart';
 import '../models/schedule_changes.dart';
 import '../models/transport.dart';
+import '../utils/visit_time_wording.dart';
 import '../services/schedule_selection_policy.dart';
 import 'course_change_details.dart';
 
@@ -22,11 +25,12 @@ class ScheduleChangeReview extends StatelessWidget {
   final ScheduleChanges changes;
   final bool remote;
   final List<String> warnings;
-  String staff(String id) => catalog.staff.firstWhere((s) => s.id == id).name;
+  String staff(String id) =>
+      displayName(catalog.staff.firstWhere((s) => s.id == id).name);
   String route(String id) =>
-      catalog.baseRoutes.firstWhere((r) => r.id == id).name;
+      displayName(catalog.baseRoutes.firstWhere((r) => r.id == id).name);
   String person(String id) =>
-      catalog.passengers.firstWhere((p) => p.id == id).name;
+      displayName(catalog.passengers.firstWhere((p) => p.id == id).name);
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -36,9 +40,7 @@ class ScheduleChangeReview extends StatelessWidget {
         key: const Key('confirmation-target'),
       ),
       const SizedBox(height: 8),
-      Text(
-        remote ? '최종 일정 확정 후 직원에게 공유됩니다.' : '테스트 데이터 · 최종 확정 전 변경 내용을 확인해 주세요.',
-      ),
+      Text(remote ? '일정 확정 후 직원에게 공유됩니다.' : '확정 전 변경 내용을 확인해 주세요.'),
       Text(
         '${changes.initial ? '처음 확정할' : '변경할'} 코스 ${changedCourseIds(changes, snapshot).length}개',
         key: const Key('changed-course-count'),
@@ -83,8 +85,8 @@ class ScheduleChangeReview extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               title: Text('${staff(r.staffId)} · ${route(r.baseRouteId)}'),
               subtitle: Text(
-                '${catalog.vehicles.firstWhere((v) => v.id == r.vehicleId).name} · 예상 ${minuteLabel(r.startMinute)}–${minuteLabel(r.endMinute)}\n'
-                '${r.passengerIds.map((id) => '${person(id)} (${minuteLabel(r.estimatedVisitMinutes[id])})').join(' → ')}',
+                '${displayName(catalog.vehicles.firstWhere((v) => v.id == r.vehicleId).name)}\n'
+                '${r.passengerIds.map((id) => '${person(id)}${visitTimeText(snapshot.period, r, id) == null ? '' : ' (${visitTimeText(snapshot.period, r, id)})'}').join(' → ')}',
               ),
             ),
         ],

@@ -42,7 +42,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('staff-s40')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('staff-detail-s40')), findsOneWidget);
-      expect(find.text('가상 40코스'), findsOneWidget);
+      expect(find.text('40코스'), findsOneWidget);
       await tester.enterText(find.byKey(const Key('staff-search')), '김다정');
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('staff-s1')));
@@ -58,7 +58,7 @@ void main() {
       await tester.pumpAndSettle();
       c.movePassenger('p78', 'morning-a');
       c.setVisitMinute('morning-a', 'p78', 520);
-      keepReviewedTimes(c);
+
       await tester.pumpAndSettle();
       expect(c.routesForStaff('s40').single.passengerIds, ['p79']);
       expect(c.validationErrors, isEmpty);

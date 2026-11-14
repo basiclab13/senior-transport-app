@@ -8,13 +8,25 @@ import '../models/transport.dart';
 import '../models/staff_absence.dart';
 import 'staff_availability_diagnostics.dart';
 import 'attendance_repository.dart';
+import 'work_photo_repository.dart';
 import '../data/emulator_display_names.dart';
 
 class ScheduleViewData {
-  const ScheduleViewData(this.catalog, this.confirmed, {this.lastRequestId});
+  const ScheduleViewData(
+    this.catalog,
+    this.confirmed, {
+    this.lastRequestId,
+    this.previewDraft,
+  });
   final ScheduleCatalog catalog;
   final ScheduleSnapshot? confirmed;
   final String? lastRequestId;
+  final ScheduleSnapshot? previewDraft;
+}
+
+abstract class CatalogPreviewScope {
+  Map<String, dynamic> get previewContext;
+  Set<String> get reserveStaffIds;
 }
 
 abstract class ScheduleRepository {
@@ -65,9 +77,28 @@ class FirebaseScheduleRepository
         ScheduleSuggestionRepository,
         AttendanceProvider {
   @override
-  late final AttendanceRepository attendance = FirebaseAttendanceRepository(
-    firestore,
-  );
+  late final AttendanceRepository attendance =
+      const bool.fromEnvironment('ENABLE_STORAGE_WORK_PHOTOS') &&
+          ((const bool.fromEnvironment('USE_FIREBASE_EMULATORS') &&
+                  firestore.app.options.projectId == 'demo-senior-transport') ||
+              (!const bool.fromEnvironment('USE_FIREBASE_EMULATORS') &&
+                  firestore.app.options.projectId == 'senior-transport-app')) &&
+          functions.app.options.projectId == firestore.app.options.projectId
+      ? WorkPhotoRepository(
+          enabled: true,
+          call: (name, input) async {
+            final response = await functions
+                .httpsCallable(
+                  name,
+                  options: HttpsCallableOptions(
+                    timeout: const Duration(seconds: 75),
+                  ),
+                )
+                .call<Map<String, dynamic>>(input);
+            return Map<String, dynamic>.from(response.data);
+          },
+        )
+      : FirebaseAttendanceRepository(firestore);
   FirebaseScheduleRepository(this.firestore, this.functions);
   final FirebaseFirestore firestore;
   final FirebaseFunctions functions;
@@ -75,16 +106,20 @@ class FirebaseScheduleRepository
 
   @override
   bool get allowsAiSuggestions =>
-      const bool.fromEnvironment('USE_FIREBASE_EMULATORS') &&
-      firestore.app.options.projectId == 'demo-senior-transport' &&
-      functions.app.options.projectId == 'demo-senior-transport';
+      (const bool.fromEnvironment('USE_FIREBASE_EMULATORS') &&
+          firestore.app.options.projectId == 'demo-senior-transport' &&
+          functions.app.options.projectId == 'demo-senior-transport') ||
+      (!const bool.fromEnvironment('USE_FIREBASE_EMULATORS') &&
+          const bool.fromEnvironment('ENABLE_PRODUCTION_AI') &&
+          firestore.app.options.projectId == 'senior-transport-app' &&
+          functions.app.options.projectId == 'senior-transport-app');
 
   @override
   Future<Map<String, dynamic>> suggestSchedule(
     Map<String, dynamic> request,
   ) async {
     if (!allowsAiSuggestions) {
-      throw StateError('AI 시연은 Emulator에서만 사용할 수 있습니다.');
+      throw StateError('이 앱에서는 AI 추천이 활성화되지 않았습니다.');
     }
     final result = await functions
         .httpsCallable(

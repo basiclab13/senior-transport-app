@@ -21,8 +21,7 @@ Future<void> openAdminEditor(WidgetTester tester) async {
 }
 
 Future<void> openStaffInfo(WidgetTester tester, String id) async {
-  if (find.byKey(ValueKey('staff-absence-$id')).evaluate().isNotEmpty ||
-      find.byKey(ValueKey('attendance-$id')).evaluate().isNotEmpty) {
+  if (find.byKey(ValueKey('staff-absence-$id')).evaluate().isNotEmpty) {
     return;
   }
   final tile = find.byKey(ValueKey('staff-info-$id'));
@@ -38,14 +37,6 @@ Future<void> openStaffInfo(WidgetTester tester, String id) async {
   );
   await tester.tap(tile);
   await tester.pumpAndSettle();
-}
-
-/// Existing flow tests explicitly acknowledge unchanged, valid visit estimates.
-/// B-2 tests exercise the pending gate and the actual confirmation dialog.
-void keepReviewedTimes(ScheduleController c) {
-  for (final id in c.pendingTimeReviewRouteIds) {
-    c.keepVisitTimes(id);
-  }
 }
 
 ScheduleCatalog demoCatalog() => ScheduleCatalog(

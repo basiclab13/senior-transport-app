@@ -10,7 +10,6 @@ import 'package:senior_transport_app/models/transport.dart';
 import 'package:senior_transport_app/screens/schedule_screen.dart';
 import 'package:senior_transport_app/services/schedule_controller.dart';
 import 'package:senior_transport_app/services/schedule_repository.dart';
-import 'package:senior_transport_app/services/visit_time_calculator.dart';
 
 import 'staff_absence_test.dart' show AbsenceRepository;
 import 'support/fixtures.dart';
@@ -77,7 +76,17 @@ void main() {
     await repo.availabilityEvents.close();
   });
 
-  test('request/preview is read-only; approved batch preserves all protected fields and enters B-2', () async {
+  test('each explicit AI request has a fresh identifier without publishing schedules', () async {
+    await c.requestAiSuggestion();
+    await c.requestAiSuggestion();
+    final first = repo.suggestionRequests[0]['requestId'] as String;
+    final second = repo.suggestionRequests[1]['requestId'] as String;
+    expect(first, matches(RegExp(r'^[a-f0-9]{32}$')));
+    expect(second, isNot(first));
+    expect(repo.requests, isEmpty);
+  });
+
+  test('request/preview is read-only; approved batch preserves all protected fields without time approval', () async {
     c.setVisitMinute('morning-a', 'p1', 490);
     c.setVisitMinute('morning-a', 'p2', 500);
     final origin = c.draft;
@@ -101,47 +110,43 @@ void main() {
     );
     expect(c.draft.absentIds, origin.absentIds);
     expect(c.draft.excludedIds, origin.excludedIds);
-    expect(c.pendingTimeReviewRouteIds, {'morning-a'});
-    expect(() => c.keepVisitTimes('morning-a'), throwsStateError);
-    expect(await c.publish(), isFalse);
-    expect(repo.requests, isEmpty);
-    c.applyVisitTimePreview(
-      previewVisitTimes(c.draft, 'morning-a', 480, 5, replaceManual: true),
-      manualOverwriteConfirmed: true,
-    );
+    expect(c.confirmationErrors, isEmpty);
     expect(await c.publish(), isTrue);
     expect(c.confirmed!.version, 1);
   });
 
-  test('passenger transfer marks both routes and carries legacy time without adding provenance', () async {
-    // A legacy source is represented by a loaded confirmed schedule.
-    final original = c.draft;
-    repo.snapshots[repo.key(c.selectedDate, c.period)] = original.copyWith(
-      version: 1,
-      confirmedAt: DateTime(2026),
-      routes: [
-        original.routes.first.copyWith(estimatedVisitMinutes: {'p1': 490}),
-        original.routes.last,
-      ],
-    );
-    await c.reloadDiscardingDraft();
-    await settle();
-    repo.respond = (request) {
-      final result = FixedSuggestionRepository.fixed(request);
-      final routes = result['routes'] as List;
-      routes[0]['passengerIds'] = ['p2', 'p3'];
-      routes[1]['passengerIds'] = ['p4', 'p5', 'p1'];
-      return result;
-    };
-    final suggestion = await c.requestAiSuggestion();
-    c.applyAiSuggestion(suggestion);
-    expect(c.pendingTimeReviewRouteIds, {'morning-a', 'morning-b'});
-    expect(c.draft.routes.last.estimatedVisitMinutes['p1'], 490);
-    expect(
-      c.draft.routes.last.estimatedVisitSources.containsKey('p1'),
-      isFalse,
-    );
-  });
+  test(
+    'passenger transfer carries legacy time without adding provenance',
+    () async {
+      // A legacy source is represented by a loaded confirmed schedule.
+      final original = c.draft;
+      repo.snapshots[repo.key(c.selectedDate, c.period)] = original.copyWith(
+        version: 1,
+        confirmedAt: DateTime(2026),
+        routes: [
+          original.routes.first.copyWith(estimatedVisitMinutes: {'p1': 490}),
+          original.routes.last,
+        ],
+      );
+      await c.reloadDiscardingDraft();
+      await settle();
+      repo.respond = (request) {
+        final result = FixedSuggestionRepository.fixed(request);
+        final routes = result['routes'] as List;
+        routes[0]['passengerIds'] = ['p2', 'p3'];
+        routes[1]['passengerIds'] = ['p4', 'p5', 'p1'];
+        return result;
+      };
+      final suggestion = await c.requestAiSuggestion();
+      c.applyAiSuggestion(suggestion);
+      expect(c.confirmationErrors, isEmpty);
+      expect(c.draft.routes.last.estimatedVisitMinutes['p1'], 490);
+      expect(
+        c.draft.routes.last.estimatedVisitSources.containsKey('p1'),
+        isFalse,
+      );
+    },
+  );
 
   test('duplicate passenger, absent owner, missing course, unknown staff and protected fields cannot apply', () async {
     final origin = c.draft;
@@ -270,7 +275,7 @@ void main() {
       final origin = c.draft;
       await tester.tap(find.byKey(const Key('suggest-schedule')));
       await tester.pumpAndSettle();
-      expect(find.text('AI 일정 제안 검토'), findsOneWidget);
+      expect(find.text('추천 일정 확인'), findsOneWidget);
       expect(c.draft, same(origin));
       await tester.tap(find.text('취소'));
       await tester.pumpAndSettle();
@@ -279,7 +284,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('approve-ai-suggestion')));
       await tester.pumpAndSettle();
-      expect(c.pendingTimeReviewRouteIds, {'morning-a'});
+      expect(c.confirmationErrors, isEmpty);
       expect(repo.requests, isEmpty);
       expect(c.hasPendingChanges, isTrue);
       expect(tester.takeException(), isNull);
@@ -301,7 +306,7 @@ void main() {
             .onPressed,
         isNull,
       );
-      expect(find.textContaining('닫고 다시 요청'), findsOneWidget);
+      expect(find.textContaining('닫고 다시 추천받아'), findsOneWidget);
       expect(repo.requests, isEmpty);
       expect(tester.takeException(), isNull);
     },
@@ -321,13 +326,13 @@ void main() {
       expect(find.text('AI 제안 생성 중…'), findsOneWidget);
       expect(
         tester
-            .widget<OutlinedButton>(find.byKey(const Key('suggest-schedule')))
+            .widget<TextButton>(find.byKey(const Key('suggest-schedule')))
             .onPressed,
         isNull,
       );
       repo.aiHold!.complete();
       await tester.pumpAndSettle();
-      expect(find.textContaining('AI 요청에 실패'), findsOneWidget);
+      expect(find.textContaining('추천을 받지 못했습니다'), findsOneWidget);
       expect(c.draft, same(origin));
       expect(tester.takeException(), isNull);
     },
@@ -381,36 +386,41 @@ void main() {
         final origin = c.draft;
         await tester.tap(find.byKey(const Key('suggest-schedule')));
         await tester.pumpAndSettle();
-        expect(find.byKey(const Key('ai-distance-comparison')), findsOneWidget);
-        final summary = tester
-            .widget<Text>(find.byKey(const Key('ai-distance-change')))
-            .data!;
-        expect(
-          summary,
-          contains(
-            outcome == 'improved'
-                ? '감소 2.000 km · 20.00%'
-                : outcome == 'worse'
-                ? '거리 개선안이 아닙니다'
-                : '개선이 없습니다',
-          ),
-        );
-        expect(find.text('계산으로 확인한 추천 설명'), findsNothing);
-        expect(find.byKey(const Key('ai-distance-limit')), findsOneWidget);
+        expect(find.byKey(const Key('ai-distance-comparison')), findsNothing);
+        if (outcome != 'unchanged') {
+          final more = find.byKey(const Key('ai-more-details'));
+          await tester.scrollUntilVisible(
+            more,
+            100,
+            scrollable: find.byType(Scrollable).last,
+          );
+          await tester.tap(more);
+          await tester.pumpAndSettle();
+          final summary = tester
+              .widget<Text>(find.byKey(const Key('ai-distance-change')))
+              .data!;
+          expect(
+            summary,
+            contains(
+              outcome == 'improved'
+                  ? '감소 2.000 km · 20.00%'
+                  : outcome == 'worse'
+                  ? '거리 개선안이 아닙니다'
+                  : '개선이 없습니다',
+            ),
+          );
+          expect(find.text('계산으로 확인한 추천 설명'), findsNothing);
+          expect(find.byKey(const Key('ai-distance-limit')), findsOneWidget);
+        }
         expect(c.draft, same(origin));
         expect(repo.requests, isEmpty);
         if (outcome == 'unchanged') {
-          expect(find.text('현재 일정과 변경사항이 없습니다.'), findsOneWidget);
-          expect(
-            tester
-                .widget<FilledButton>(
-                  find.byKey(const Key('approve-ai-suggestion')),
-                )
-                .onPressed,
-            isNull,
-          );
+          expect(find.text('현재 일정 그대로 사용해도 됩니다'), findsOneWidget);
+          expect(find.byKey(const Key('approve-ai-suggestion')), findsNothing);
+          await tester.tap(find.byKey(const Key('close-ai-suggestion')));
+        } else {
+          await tester.tap(find.text('취소'));
         }
-        await tester.tap(find.text('취소'));
         await tester.pumpAndSettle();
         expect(c.draft, same(origin));
         expect(tester.takeException(), isNull);

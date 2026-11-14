@@ -11,7 +11,7 @@ enum ScheduleChangeKind {
   absence('결석 변경'),
   exclusion('제외 변경'),
   vehicle('차량 변경'),
-  time('예상 시각 변경'),
+  time('약속 시간 변경'),
   route('코스 변경');
 
   const ScheduleChangeKind(this.label);
@@ -115,14 +115,6 @@ class ScheduleChanges {
           {id},
         );
       }
-      if (old.startMinute != next.startMinute ||
-          old.endMinute != next.endMinute) {
-        add(
-          ScheduleChangeKind.time,
-          '${location(next)} 운행: ${minuteLabel(old.startMinute)}–${minuteLabel(old.endMinute)} → ${minuteLabel(next.startMinute)}–${minuteLabel(next.endMinute)}',
-          {id},
-        );
-      }
     }
     final ids = {
       ...before.routes.expand((r) => r.passengerIds),
@@ -182,23 +174,28 @@ class ScheduleChanges {
           affectedRoutes,
         );
       }
-      if (old.length == 1 &&
+      if (after.period == TransportPeriod.morning &&
+          old.length == 1 &&
           next.length == 1 &&
+          (old.single.estimatedVisitSources[id] == 'manual' ||
+              next.single.estimatedVisitSources[id] == 'manual') &&
           old.single.estimatedVisitMinutes[id] !=
               next.single.estimatedVisitMinutes[id]) {
         add(
           ScheduleChangeKind.time,
-          '${person(id)} 방문: ${minuteLabel(old.single.estimatedVisitMinutes[id])} → ${minuteLabel(next.single.estimatedVisitMinutes[id])} · ${assignment(next)}',
+          '${person(id)} 약속 시간: ${old.single.estimatedVisitSources[id] == 'manual' ? minuteLabel(old.single.estimatedVisitMinutes[id]) : '미입력'} → ${next.single.estimatedVisitSources[id] == 'manual' ? minuteLabel(next.single.estimatedVisitMinutes[id]) : '미입력'} · ${assignment(next)}',
           affectedRoutes,
         );
-      } else if (old.length == 1 &&
+      } else if (after.period == TransportPeriod.morning &&
+          old.length == 1 &&
           next.length == 1 &&
           old.single.estimatedVisitMinutes.containsKey(id) &&
           next.single.estimatedVisitMinutes.containsKey(id) &&
-          old.single.isManualEstimate(id) != next.single.isManualEstimate(id)) {
+          old.single.estimatedVisitSources[id] !=
+              next.single.estimatedVisitSources[id]) {
         add(
           ScheduleChangeKind.time,
-          '${person(id)} 예상 시각 출처: ${old.single.isManualEstimate(id) ? '수동' : '고정 간격'} → ${next.single.isManualEstimate(id) ? '수동' : '고정 간격'} · ${assignment(next)}',
+          '${person(id)} 약속 시간 입력 변경 · ${assignment(next)}',
           affectedRoutes,
         );
       }

@@ -28,9 +28,6 @@ void main() {
     final morning = source.confirmed!;
     source.selectPeriod(TransportPeriod.afternoon);
     source.setOperatingWindow('afternoon-a', 960, 1020);
-    source.setVisitMinute('afternoon-a', 'p3', 970);
-    source.setVisitMinute('afternoon-a', 'p1', 980);
-    source.setVisitMinute('afternoon-a', 'p2', 990);
     source.confirm();
     c = fixtureController(
       user: staff,
@@ -64,8 +61,8 @@ void main() {
     await tester.ensureVisible(first);
     await tester.pumpAndSettle();
     expect(find.text('담당 차량 · 햇살 1호'), findsOneWidget);
-    expect(find.text('예상 운행 08:00–09:00 · 60분'), findsOneWidget);
-    expect(find.text('예상 08:10'), findsOneWidget);
+    expect(find.text('운행 참고 08:00–09:00 · 60분'), findsNothing);
+    expect(find.text('약속 시간 08:10'), findsOneWidget);
     expect(find.text('가상마을 햇살길 1'), findsOneWidget);
     expect(
       tester.getTopLeft(first).dy,
@@ -76,7 +73,7 @@ void main() {
       lessThan(tester.getTopLeft(find.byKey(const ValueKey('timeline-p3'))).dy),
     );
     expect(find.text('나무 B코스'), findsNothing);
-    expect(find.text('가상 어르신 D'), findsNothing);
+    expect(find.text('어르신 D'), findsNothing);
     expect(find.byKey(const Key('confirm-schedule')), findsNothing);
     expect(find.byKey(const ValueKey('absent-p1')), findsNothing);
     expect(find.byKey(const Key('staff-search')), findsNothing);
@@ -85,11 +82,14 @@ void main() {
 
   testWidgets('오전·오후 전환과 다른 날짜 조회에서 확정본을 구분한다', (tester) async {
     await open(tester);
-    expect(find.textContaining('실제 운행 시각과 다를 수'), findsOneWidget);
+    expect(find.textContaining('실제 운행 시각과 다를 수'), findsNothing);
     await tester.tap(find.text('오후'));
     await tester.pumpAndSettle();
-    expect(find.text('예상 운행 16:00–17:00 · 60분'), findsOneWidget);
-    expect(find.text('예상 16:10'), findsOneWidget);
+    expect(find.text('운행 참고 16:00–17:00 · 60분'), findsNothing);
+    expect(find.textContaining('기존 저장 시각 16:10'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('timeline-p3')));
+    await tester.pumpAndSettle();
+    expect(find.text('기존 저장 시각 16:10 · 직접 입력'), findsNothing);
     expect(
       tester.getTopLeft(find.byKey(const ValueKey('timeline-p3'))).dy,
       lessThan(tester.getTopLeft(find.byKey(const ValueKey('timeline-p1'))).dy),
@@ -101,12 +101,12 @@ void main() {
     expect(find.byKey(const ValueKey('timeline-p3')), findsNothing);
     await tester.tap(find.byTooltip('이전 날짜'));
     await tester.pumpAndSettle();
-    expect(find.text('예상 16:10'), findsOneWidget);
+    expect(find.textContaining('기존 저장 시각 16:10'), findsNothing);
   });
 
   testWidgets('첫 화면의 미연결 사진 안내는 저장된 것처럼 표시하지 않는다', (tester) async {
     await open(tester);
-    expect(find.text('사진 등록은 Emulator 시연 환경에서 사용할 수 있습니다.'), findsOneWidget);
+    expect(find.text('사진 등록을 사용할 수 없습니다. 관리자에게 문의해 주세요.'), findsOneWidget);
     expect(find.byKey(const Key('register-work-start')), findsNothing);
     expect(find.text('내 송영 일정'), findsOneWidget);
   });

@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../utils/display_wording.dart';
+
 import '../services/auth_service.dart';
 import '../services/schedule_repository.dart';
 import 'login_screen.dart';
 import 'schedule_screen.dart';
+import '../models/app_user.dart';
+import '../services/catalog_preview_repository.dart';
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key, required this.auth, required this.schedules});
@@ -32,7 +36,7 @@ class AuthGate extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(auth.error ?? '사용 권한을 확인할 수 없습니다.'),
+                  Text(displayMessage(auth.error ?? '사용 권한을 확인할 수 없습니다.')),
                   const SizedBox(height: 16),
                   FilledButton(
                     onPressed: auth.busy ? null : auth.retry,
@@ -60,6 +64,14 @@ class AuthGate extends StatelessWidget {
               onSignOut: auth.signOut,
               signingOut: auth.busy,
               authError: auth.error,
+              catalogPreviewSource:
+                  user.role == UserRole.admin &&
+                      const bool.fromEnvironment('ENABLE_AI_CATALOG_PREVIEW') &&
+                      schedules is FirebaseScheduleRepository
+                  ? FirebaseCatalogPreviewSource(
+                      schedules as FirebaseScheduleRepository,
+                    )
+                  : null,
             ),
           ),
         ),

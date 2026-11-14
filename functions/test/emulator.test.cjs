@@ -188,7 +188,7 @@ test('Firestore + Auth + callable Emulator integration, 40 staff / 79 passengers
       const cases = [
         (p) => { p.routes[1].staffId = p.routes[0].staffId; },
         (p) => { p.routes[0].passengerIds.push('p4'); p.routes[0].estimatedVisitMinutes.p4 = 520; },
-        (p) => { p.routes[0].estimatedVisitMinutes.p2 = 480; },
+        (p) => { p.routes[0].estimatedVisitMinutes.p2 = -1; },
         (p) => { p.routes[0].staffId = 'unknown'; },
         (p) => { p.routes[0].staffId = 's3'; },
       ];

@@ -2,12 +2,17 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../utils/display_wording.dart';
+
+import 'package:cloud_functions/cloud_functions.dart';
+
 import '../models/app_user.dart';
 import '../models/attendance_record.dart';
 import '../models/transport.dart';
 import '../services/attendance_repository.dart';
 import '../services/demo_photo_picker.dart';
 import '../services/schedule_controller.dart';
+import '../services/work_photo_repository.dart';
 
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({
@@ -40,7 +45,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   late final records = repo?.enabled == true
       ? repo!.watch(widget.staffId, dateKey(widget.date), widget.period)
       : null;
-  late final routeNames = {for (final r in c.catalog.baseRoutes) r.id: r.name};
+  late final routeNames = {
+    for (final r in c.catalog.baseRoutes) r.id: displayName(r.name),
+  };
   WorkPhotoKind? busy;
   bool uploading = false;
   String? error;
@@ -66,7 +73,33 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       error = null;
     });
     try {
-      final photo = await (widget.photoPicker ?? pickDemoPhoto)();
+      final Uint8List? photo;
+      if (widget.photoPicker != null) {
+        photo = await widget.photoPicker!();
+      } else {
+        final camera = await showModalBottomSheet<bool>(
+          context: context,
+          builder: (context) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.camera_alt_outlined),
+                  title: const Text('카메라로 촬영'),
+                  onTap: () => Navigator.pop(context, true),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.photo_library_outlined),
+                  title: const Text('사진 선택'),
+                  onTap: () => Navigator.pop(context, false),
+                ),
+              ],
+            ),
+          ),
+        );
+        if (camera == null || !mounted) return;
+        photo = await pickDemoPhoto(camera: camera);
+      }
       if (photo == null || !mounted) return;
       final approved = await showDialog<bool>(
         context: context,
@@ -78,13 +111,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Image.memory(
-                  photo,
+                  photo!,
                   height: 180,
                   errorBuilder: (_, _, _) => const Text('사진을 표시할 수 없습니다.'),
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  '실제 이용자나 개인정보가 없는 시연용 사진만 등록해 주세요. 등록 시각을 기록하며 실제 도착이나 근무 여부를 인증하지는 않습니다.',
+                  '개인정보가 없는 사진만 등록해 주세요. 사진과 등록 시각을 기록하며, 실제 도착·근무 여부를 인증하지는 않습니다.',
                 ),
               ],
             ),
@@ -97,7 +130,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             FilledButton(
               key: const Key('confirm-work-photo'),
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('시연용 사진으로 등록'),
+              child: const Text('사진 등록'),
             ),
           ],
         ),
@@ -118,6 +151,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         routeId: widget.routeId!,
         kind: kind,
         photo: photo,
+        expectedVersion: snapshot?.version,
+        expectedAvailabilityVersion: c.absences[widget.staffId]?.version ?? 0,
       );
       if (mounted) {
         ScaffoldMessenger.of(
@@ -127,7 +162,17 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          error = e is StateError
+          error = e is FirebaseFunctionsException
+              ? switch (e.code) {
+                  'already-exists' => '이미 등록된 사진이 있습니다. 기록을 새로고침해 주세요.',
+                  'aborted' => '등록 처리 중이거나 일정이 변경되었습니다. 잠시 후 기록을 새로고침해 주세요.',
+                  'permission-denied' =>
+                    '본인의 확정 일정만 등록할 수 있습니다. 담당 일정을 확인해 주세요.',
+                  'failed-precondition' => '사진 설정, 오늘의 확정 일정과 결근 여부를 확인해 주세요. 종료 사진은 시작 사진부터 등록해야 합니다.',
+                  'invalid-argument' => '작은 JPEG 사진을 다시 선택해 주세요.',
+                  _ => '등록 완료 여부를 확인하지 못했습니다. 연결을 확인하고 기록을 새로고침한 뒤 다시 시도해 주세요.',
+                }
+              : e is StateError
               ? e.message.toString()
               : '사진을 등록하지 못했습니다. 연결과 담당 일정을 확인한 뒤 다시 시도해 주세요.';
         });
@@ -147,15 +192,25 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       ? _embedded()
       : Scaffold(
           appBar: AppBar(
-            title: Text(staff ? '업무 사진 기록' : '${widget.staffName} 업무 사진 기록'),
+            title: Text(
+              staff ? '업무 사진 기록' : '${displayName(widget.staffName)} 업무 사진 기록',
+            ),
+            actions: [
+              if (repo is WorkPhotoRepository)
+                IconButton(
+                  tooltip: '사진 기록 새로고침',
+                  icon: const Icon(Icons.refresh),
+                  onPressed: () => (repo as WorkPhotoRepository).refresh(),
+                ),
+            ],
           ),
           body: records == null
               ? ListView(
                   padding: const EdgeInsets.all(24),
                   children: [
-                    const Text('사진 등록은 Emulator 시연 환경에서 사용할 수 있습니다.'),
+                    const Text('사진 등록을 사용할 수 없습니다. 관리자에게 문의해 주세요.'),
                     Text(
-                      '${widget.staffName} · ${dateKey(widget.date)} · ${widget.period.label}',
+                      '${displayName(widget.staffName)} · ${dateKey(widget.date)} · ${widget.period.label}',
                     ),
                     const Text('이 화면에서는 사진이나 업무 시간이 저장되지 않습니다.'),
                     OutlinedButton(
@@ -183,11 +238,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                             padding: const EdgeInsets.all(16),
                             children: [
                               Text(
-                                '${widget.staffName} · ${dateKey(widget.date)} · ${widget.period.label}',
+                                '${displayName(widget.staffName)} · ${dateKey(widget.date)} · ${widget.period.label}',
                               ),
-                              const Text(
-                                '시연용 사진 기록 · 표시 시각은 한국 시간의 서버 등록 시각입니다.',
-                              ),
+                              const Text('등록 시각 · 한국 시간'),
                               if (!verified)
                                 Text(
                                   snapshot.hasError
@@ -196,7 +249,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                 ),
                               if (error != null)
                                 Text(
-                                  error!,
+                                  displayMessage(error!),
                                   style: TextStyle(
                                     color: Theme.of(context).colorScheme.error,
                                   ),
@@ -223,7 +276,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                           (r) => r.kind == kind,
                                         )) ...[
                                           Text(
-                                            '${routeNames[r.routeId] ?? r.routeId} · 등록 ${r.koreaTime}',
+                                            '${routeNames[r.routeId] ?? '이전 코스'} · 등록 ${r.koreaTime}',
                                           ),
                                           Image.memory(
                                             r.photo,
@@ -291,7 +344,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     if (records == null) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 8),
-        child: Text('사진 등록은 Emulator 시연 환경에서 사용할 수 있습니다.'),
+        child: Text('사진 등록을 사용할 수 없습니다. 관리자에게 문의해 주세요.'),
       );
     }
     return ListenableBuilder(
@@ -310,6 +363,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (repo is WorkPhotoRepository)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    key: const Key('refresh-work-photos'),
+                    onPressed: () => (repo as WorkPhotoRepository).refresh(),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('사진 기록 새로고침'),
+                  ),
+                ),
               if (!verified)
                 Text(
                   snapshot.hasError
@@ -318,7 +381,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 ),
               if (error != null)
                 Text(
-                  error!,
+                  displayMessage(error!),
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               for (final r in current)
@@ -354,7 +417,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                         child: Column(
                           children: [
                             Text(
-                              '${routeNames[r.routeId] ?? r.routeId} · ${r.kind.label} · ${r.koreaTime}',
+                              '${routeNames[r.routeId] ?? '이전 코스'} · ${r.kind.label} · ${r.koreaTime}',
                             ),
                             Image.memory(
                               r.photo,

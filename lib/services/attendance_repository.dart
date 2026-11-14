@@ -10,6 +10,15 @@ abstract class AttendanceProvider {
   AttendanceRepository get attendance;
 }
 
+abstract class AttendanceSummaryRepository implements AttendanceRepository {
+  Future<List<AttendanceSummary>> summaries(
+    String staffId,
+    String date,
+    TransportPeriod period,
+  );
+  Future<Uint8List> photo(AttendanceSummary summary);
+}
+
 abstract class AttendanceRepository {
   bool get enabled;
   Stream<List<AttendanceRecord>> watch(
@@ -24,6 +33,8 @@ abstract class AttendanceRepository {
     required String routeId,
     required WorkPhotoKind kind,
     required Uint8List photo,
+    int? expectedVersion,
+    int? expectedAvailabilityVersion,
   });
 }
 
@@ -82,6 +93,8 @@ class FirebaseAttendanceRepository implements AttendanceRepository {
     required String routeId,
     required WorkPhotoKind kind,
     required Uint8List photo,
+    int? expectedVersion,
+    int? expectedAvailabilityVersion,
   }) async {
     _requireEnabled();
     if (user.role != UserRole.staff || user.staffId == null) {

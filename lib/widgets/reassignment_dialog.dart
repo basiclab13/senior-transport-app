@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../utils/display_wording.dart';
+
 import '../models/schedule_catalog.dart';
 import '../models/transport.dart';
 import '../utils/staff_sort.dart';
@@ -32,8 +34,9 @@ class _ReassignmentDialogState extends State<ReassignmentDialog> {
   ScheduleSnapshot get snapshot => widget.snapshot;
   Vehicle vehicle(RouteAssignment route) =>
       catalog.vehicles.firstWhere((v) => v.id == route.vehicleId);
-  String routeName(RouteAssignment route) =>
-      catalog.baseRoutes.firstWhere((r) => r.id == route.baseRouteId).name;
+  String routeName(RouteAssignment route) => displayName(
+    catalog.baseRoutes.firstWhere((r) => r.id == route.baseRouteId).name,
+  );
   bool hasSpace(RouteAssignment route) =>
       route.passengerIds.length + 1 <= vehicle(route).passengerCapacity;
 
@@ -42,7 +45,9 @@ class _ReassignmentDialogState extends State<ReassignmentDialog> {
     final staff = catalog.staff.where((s) {
       final routes = snapshot.routes.where((r) => r.staffId == s.id);
       return s.id != widget.sourceStaffId &&
-          s.name.toLowerCase().contains(_query.trim().toLowerCase()) &&
+          displayName(s.name)
+              .toLowerCase()
+              .contains(displayName(_query.trim()).toLowerCase()) &&
           (!_availableOnly ||
               (s.isAvailable(snapshot.date, snapshot.period) &&
                   !widget.absentStaffIds.contains(s.id))) &&
@@ -65,7 +70,7 @@ class _ReassignmentDialogState extends State<ReassignmentDialog> {
                 children: [
                   Expanded(
                     child: Text(
-                      '${passenger.name} 재배정',
+                      '${displayName(passenger.name)} 재배정',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                   ),
@@ -149,7 +154,7 @@ class _ReassignmentDialogState extends State<ReassignmentDialog> {
                             if (routes.isEmpty)
                               ListTile(
                                 enabled: false,
-                                title: Text(person.name),
+                                title: Text(displayName(person.name)),
                                 subtitle: Text(
                                   '${available ? '근무 가능' : '근무 불가'} · 미배정 · 차량 미배정',
                                 ),
@@ -163,10 +168,10 @@ class _ReassignmentDialogState extends State<ReassignmentDialog> {
                                 ),
                                 isThreeLine: true,
                                 title: Text(
-                                  '${person.name} · ${routeName(route)}',
+                                  '${displayName(person.name)} · ${routeName(route)}',
                                 ),
                                 subtitle: Text(
-                                  '직원 총 $total명 · ${vehicle(route).name} · ${available ? '근무 가능' : '근무 불가'}\n'
+                                  '직원 총 $total명 · ${displayName(vehicle(route).name)} · ${available ? '근무 가능' : '근무 불가'}\n'
                                   '현재 ${route.passengerIds.length}/${vehicle(route).passengerCapacity}명 · 이동 후 ${route.passengerIds.length + 1}명${hasSpace(route) ? '' : ' · 정원 초과'}',
                                 ),
                                 trailing: Icon(

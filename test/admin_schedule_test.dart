@@ -109,7 +109,7 @@ void main() {
     await tester.tap(find.byKey(const Key('save-estimated-time')));
     await tester.pumpAndSettle();
     expect(c.draft.routes.first.estimatedVisitMinutes['p1'], 490);
-    expect(find.textContaining('예상 08:10'), findsOneWidget);
+    expect(find.textContaining('약속 시간 08:10'), findsOneWidget);
   });
 
   testWidgets('이용자 재배정 후 여러 직원의 변경사항을 함께 검토하고 확정한다', (tester) async {
@@ -124,7 +124,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(c.routesForStaff('s1').single.passengerIds, ['p1', 'p3', 'p4']);
     expect(c.routesForStaff('s2').single.passengerIds, ['p5']);
-    keepReviewedTimes(c);
+
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('confirm-schedule')));
     await tester.pumpAndSettle();

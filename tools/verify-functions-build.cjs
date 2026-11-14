@@ -47,20 +47,33 @@ function verify() {
   assert.ok(config.functions.ignore.includes('.env.local'));
   const manifest = inspectEntry();
   const names = Object.keys(manifest.endpoints).sort();
-  assert.deepEqual(names, ['confirmSchedule', 'setStaffAbsence']);
-  assert.deepEqual(manifest.params, []);
-  assert.equal(manifest.aiLoaded, false);
-  assert.ok(!manifest.requiredAPIs.some(item => /secretmanager|generativelanguage/.test(item.api)));
-  for (const endpoint of Object.values(manifest.endpoints)) {
+  assert.deepEqual(names, ['confirmSchedule', 'getWorkPhotos', 'registerWorkPhoto', 'setStaffAbsence', 'suggestSchedule']);
+  assert.deepEqual(manifest.params.map(p=>[p.name,p.type]).sort(), [['GEMINI_API_KEY','secret'],['GEMINI_MODEL','string'],['WORK_PHOTO_BUCKET','string']]);
+  for(const name of ['registerWorkPhoto','getWorkPhotos']) {
+    const endpoint=manifest.endpoints[name];
+    assert.equal(endpoint.platform,'gcfv2');assert.deepEqual(endpoint.region,['asia-northeast3']);
+    assert.equal(endpoint.maxInstances,1);assert.equal(endpoint.concurrency,1);assert.equal(endpoint.timeoutSeconds,60);
+    assert.equal((endpoint.secretEnvironmentVariables||[]).length,0);
+    assert.equal(endpoint.serviceAccountEmail,'work-photos@senior-transport-app.iam.gserviceaccount.com');
+  }
+  for (const name of ['confirmSchedule','setStaffAbsence']) {
+    const endpoint=manifest.endpoints[name];
     assert.equal(endpoint.platform, 'gcfv2');
     assert.deepEqual(endpoint.region, ['asia-northeast3']);
     assert.equal(endpoint.maxInstances, 2);
     assert.ok(endpoint.callableTrigger);
     assert.equal((endpoint.secretEnvironmentVariables || []).length, 0);
   }
+  const ai=manifest.endpoints.suggestSchedule;
+  assert.equal(ai.platform,'gcfv2');
+  assert.deepEqual(ai.region,['asia-northeast3']);
+  assert.equal(ai.maxInstances,1);assert.equal(ai.minInstances,0);assert.equal(ai.concurrency,1);
+  assert.equal(ai.timeoutSeconds,90);
+  assert.deepEqual(ai.secretEnvironmentVariables,[{key:'GEMINI_API_KEY'}]);
+  assert.notEqual(ai.callableTrigger.enforceAppCheck,true);
   return {status: 'VERIFIED', projectId: 'senior-transport-app', runtime: 'nodejs22',
-    region: 'asia-northeast3', endpoints: names, parameters: 0, secretBindings: 0,
-    aiModuleLoaded: false, remoteRequests: 0};
+    region: 'asia-northeast3', endpoints: names, parameters: 3, secretBindings: 1,
+    aiDefaultMode: 'off', scheduleFunctionSecretBindings: 0, remoteRequests: 0};
 }
 
 if (require.main === module) {

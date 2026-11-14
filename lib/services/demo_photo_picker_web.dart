@@ -8,11 +8,11 @@ import 'package:web/web.dart' as web;
 
 import '../models/attendance_record.dart';
 
-Future<Uint8List?> pickDemoPhoto() async {
+Future<Uint8List?> pickDemoPhoto({bool camera = true}) async {
   final input = web.HTMLInputElement()
     ..type = 'file'
-    ..accept = 'image/jpeg,image/png'
-    ..capture = 'environment';
+    ..accept = 'image/jpeg,image/png';
+  if (camera) input.capture = 'environment';
   final chosen = Completer<web.File?>();
   final change = ((web.Event event) {
     if (!chosen.isCompleted) chosen.complete(input.files?.item(0));
@@ -25,7 +25,10 @@ Future<Uint8List?> pickDemoPhoto() async {
   input.click();
   final web.File? file;
   try {
-    file = await chosen.future;
+    file = await chosen.future.timeout(
+      const Duration(minutes: 3),
+      onTimeout: () => throw StateError('사진 선택을 완료하지 못했습니다. 다시 눌러 주세요.'),
+    );
   } finally {
     input.removeEventListener('change', change);
     input.removeEventListener('cancel', cancel);

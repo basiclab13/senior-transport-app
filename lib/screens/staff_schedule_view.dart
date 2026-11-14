@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../utils/display_wording.dart';
+
 import '../models/transport.dart';
 import '../services/schedule_controller.dart';
 import '../widgets/route_timeline.dart';
@@ -35,7 +37,7 @@ class StaffScheduleView extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           children: [
             Text(
-              '${person.name}님의 ${c.period.label} 송영 일정',
+              '${displayName(person.name)}님',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             if (absent)
@@ -72,18 +74,17 @@ class StaffScheduleView extends StatelessWidget {
                           children: [
                             Expanded(
                               child: Text(
-                                c.baseRoute(route.baseRouteId).name,
+                                displayName(
+                                  c.baseRoute(route.baseRouteId).name,
+                                ),
                                 style: Theme.of(context).textTheme.titleLarge,
                               ),
                             ),
                             Text('이용자 ${route.passengerIds.length}명'),
                           ],
                         ),
-                        Text('담당 차량 · ${c.vehicle(route.vehicleId).name}'),
                         Text(
-                          route.startMinute == null || route.endMinute == null
-                              ? '예상 운행 시간 · 미입력'
-                              : '예상 운행 ${minuteLabel(route.startMinute)}–${minuteLabel(route.endMinute)} · ${route.endMinute! - route.startMinute!}분',
+                          '담당 차량 · ${displayName(c.vehicle(route.vehicleId).name)}',
                         ),
                       ],
                     ),
@@ -96,7 +97,7 @@ class StaffScheduleView extends StatelessWidget {
               embedded: true,
               controller: c,
               staffId: person.id,
-              staffName: person.name,
+              staffName: displayName(person.name),
               date: c.selectedDate,
               period: c.period,
               routeId: routeId,
@@ -107,10 +108,6 @@ class StaffScheduleView extends StatelessWidget {
               const Text(
                 '방문 순서',
                 style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const Text(
-                '예상 방문 시간은 실제 운행 시각과 다를 수 있습니다.',
-                style: TextStyle(fontSize: 12),
               ),
               for (final route in routes)
                 RouteTimeline(controller: c, route: route, collapseNotes: true),

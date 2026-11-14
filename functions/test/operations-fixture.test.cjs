@@ -30,13 +30,13 @@ test('morning and afternoon operational scenarios validate; afternoon includes a
   }
 });
 
-test('missing passenger, duplicate, full vehicle, unavailable staff and time conflict remain blocked',()=>{
+test('missing passenger, duplicate, full vehicle, unavailable staff and invalid time format remain blocked',()=>{
   const catalog=operationsCatalog();
   for(const mutate of [
     (request)=>{request.routes.at(-1).passengerIds.pop();},
     (request)=>{request.routes[1].passengerIds.push('p1');},
     (request)=>{request.routes[0].passengerIds.push('p4');request.routes[1].passengerIds=request.routes[1].passengerIds.filter((id)=>id!=='p4');},
-    (request)=>{request.routes[0].estimatedVisitMinutes.p2=530;},
+    (request)=>{request.routes[0].estimatedVisitMinutes.p2=-1;},
     (request)=>{request.date='2026-11-13';request.routes[0].staffId='s3';},
     (request)=>{request.routes[1].vehicleId=request.routes[0].vehicleId;},
   ]) {

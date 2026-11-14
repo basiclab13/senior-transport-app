@@ -210,7 +210,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(c.draft.routes.first.staffId, 's3');
       expect(c.confirmed!.routes.first.staffId, 's1');
-      keepReviewedTimes(c);
+
       await tester.pumpAndSettle(const Duration(seconds: 5));
       await tester.tap(find.byKey(const Key('confirm-schedule')));
       await tester.pumpAndSettle();
@@ -281,7 +281,13 @@ void main() {
         '직원 20',
       );
       await tester.pumpAndSettle();
-      expect(find.text('가상 직원 20'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('course-transfer-target-s20')),
+          matching: find.text('직원 20'),
+        ),
+        findsOneWidget,
+      );
       expect(
         tester
             .widget<ListTile>(

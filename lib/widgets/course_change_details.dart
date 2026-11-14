@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../utils/display_wording.dart';
+
 import '../models/schedule_catalog.dart';
 import '../models/schedule_changes.dart';
 import '../models/transport.dart';
 import '../utils/schedule_wording.dart';
+import '../utils/visit_time_wording.dart';
 
 Set<String> changedCourseIds(
   ScheduleChanges changes,
@@ -30,10 +33,12 @@ class CourseChangeDetails extends StatelessWidget {
   final bool expand;
   final bool showVisitTimes;
   final String afterLabel;
-  String staff(String? id) =>
-      catalog.staff.where((s) => s.id == id).firstOrNull?.name ?? '담당 없음';
-  String name(String id) =>
-      catalog.passengers.where((p) => p.id == id).firstOrNull?.name ?? id;
+  String staff(String? id) => displayName(
+    catalog.staff.where((s) => s.id == id).firstOrNull?.name ?? '담당 없음',
+  );
+  String name(String id) => displayName(
+    catalog.passengers.where((p) => p.id == id).firstOrNull?.name ?? id,
+  );
   @override
   Widget build(BuildContext context) => Column(
     children: [
@@ -43,8 +48,9 @@ class CourseChangeDetails extends StatelessWidget {
   Widget _course(BuildContext context, String id) {
     final old = before?.routes.where((r) => r.baseRouteId == id).firstOrNull;
     final next = after.routes.where((r) => r.baseRouteId == id).firstOrNull;
-    final title =
-        catalog.baseRoutes.where((r) => r.id == id).firstOrNull?.name ?? id;
+    final title = displayName(
+      catalog.baseRoutes.where((r) => r.id == id).firstOrNull?.name ?? id,
+    );
     final items = changes.items
         .where((item) => item.routeIds.contains(id))
         .toList();
@@ -60,7 +66,7 @@ class CourseChangeDetails extends StatelessWidget {
             ? '담당 직원: ${staff(old.staffId)} → ${staff(next.staffId)}'
             : before == null
             ? '처음 확정하는 코스'
-            : '변경 ${items.length}항목',
+            : items.map((item) => item.kind.label).toSet().join(' · '),
       ),
       children: [
         LayoutBuilder(
@@ -89,12 +95,14 @@ class CourseChangeDetails extends StatelessWidget {
             padding: const EdgeInsets.only(top: 8),
             child: Text(easyScheduleMessage(item.description)),
           ),
-        if (showVisitTimes && next != null)
+        if (showVisitTimes &&
+            after.period == TransportPeriod.morning &&
+            next != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(
-              '${catalog.vehicles.where((v) => v.id == next.vehicleId).firstOrNull?.name ?? next.vehicleId} · 예상 ${minuteLabel(next.startMinute)}–${minuteLabel(next.endMinute)}\n'
-              '${next.passengerIds.map((id) => '${name(id)} (${minuteLabel(next.estimatedVisitMinutes[id])})').join(' → ')}',
+              '${displayName(catalog.vehicles.where((v) => v.id == next.vehicleId).firstOrNull?.name ?? next.vehicleId)}\n'
+              '${next.passengerIds.map((id) => '${name(id)}${visitTimeText(after.period, next, id) == null ? '' : ' (${visitTimeText(after.period, next, id)})'}').join(' → ')}',
             ),
           ),
       ],

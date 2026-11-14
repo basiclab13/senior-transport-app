@@ -145,7 +145,7 @@ void main() {
         expect(find.byKey(const Key('register-work-end')), findsNothing);
         expect(find.text('오늘 · 11월 12일 (목) · 오전'), findsOneWidget);
         expect(find.textContaining('v1'), findsNothing);
-        expect(find.text('가상 어르신 D'), findsNothing);
+        expect(find.text('어르신 D'), findsNothing);
         await screenshot(tester, 'staff-${size.width.toInt()}');
         expect(tester.takeException(), isNull);
       },
@@ -176,10 +176,10 @@ void main() {
       final visit = find.byKey(const ValueKey('timeline-p1'));
       await tester.ensureVisible(visit);
       await tester.pumpAndSettle();
-      expect(find.text('예상 08:10'), findsOneWidget);
+      expect(find.text('약속 시간 08:10'), findsOneWidget);
       expect(find.text('가상마을 햇살길 1'), findsOneWidget);
       expect(find.text('승하차 시 천천히 안내'), findsNothing);
-      await tester.tap(find.text('가상 어르신 A'));
+      await tester.tap(find.text('어르신 A'));
       await tester.pumpAndSettle();
       expect(find.text('승하차 시 천천히 안내'), findsOneWidget);
       expect(tester.takeException(), isNull);

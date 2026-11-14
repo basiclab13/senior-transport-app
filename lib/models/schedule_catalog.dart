@@ -20,6 +20,9 @@ class ScheduleCatalog {
     baseRoutes: [],
   );
   final String version;
+  // Explicitly named, immutable fictional fixture; also label pinned staff views.
+  bool get isTestData =>
+      version == 'ai-test-25x80-v1' || version == 'demo-10x24-v1';
   final List<Staff> staff;
   final List<Vehicle> vehicles;
   final List<Passenger> passengers;

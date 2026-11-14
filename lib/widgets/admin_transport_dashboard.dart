@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../utils/display_wording.dart';
+
 import '../models/transport.dart';
 
 import '../services/schedule_controller.dart';
 import '../utils/schedule_wording.dart';
 import '../utils/staff_sort.dart';
+import '../utils/admin_schedule_status.dart';
 import 'admin_assignment_overview.dart';
 
 /// Presentation only: all blocking decisions come from the existing controller.
@@ -27,7 +30,7 @@ class _AdminTransportDashboardState extends State<AdminTransportDashboard> {
   String query = '';
   ScheduleController get c => widget.controller;
   bool matches(String value) =>
-      value.toLowerCase().contains(query.trim().toLowerCase());
+      value.toLowerCase().contains(displayName(query.trim()).toLowerCase());
   int priority(String error) => error.contains('결근')
       ? 0
       : error.contains('누락') || error.contains('배정') || error.contains('정원')
@@ -54,7 +57,7 @@ class _AdminTransportDashboardState extends State<AdminTransportDashboard> {
       ...c.draft.absentIds,
       ...c.draft.excludedIds,
     });
-    final errors = c.confirmationErrors.toSet().toList()
+    final errors = adminBlockingMessages(c).toSet().toList()
       ..sort((a, b) {
         final result = priority(a).compareTo(priority(b));
         return result == 0 ? a.compareTo(b) : result;
@@ -63,12 +66,12 @@ class _AdminTransportDashboardState extends State<AdminTransportDashboard> {
         c.catalog.staff
             .where(
               (s) =>
-                  matches(s.name) ||
+                  matches(displayName(s.name)) ||
                   c
                       .routesForStaff(s.id)
                       .any(
                         (r) => r.passengerIds.any(
-                          (id) => matches(c.passenger(id).name),
+                          (id) => matches(displayName(c.passenger(id).name)),
                         ),
                       ) ||
                   // Unassigned/absent passengers remain findable through their baseline course.
@@ -84,7 +87,7 @@ class _AdminTransportDashboardState extends State<AdminTransportDashboard> {
                         (r) => r.passengerIds.any(
                           (id) =>
                               !assigned.contains(id) &&
-                              matches(c.passenger(id).name),
+                              matches(displayName(c.passenger(id).name)),
                         ),
                       ),
             )
@@ -131,17 +134,10 @@ class _AdminTransportDashboardState extends State<AdminTransportDashboard> {
                   '배정 ${assigned.length}명 · 결석 ${c.draft.absentIds.length}명 · 미배정 ${missing.length}명${c.draft.excludedIds.isEmpty ? '' : ' · 제외 ${c.draft.excludedIds.length}명'}',
                   key: const Key('dashboard-assignment-summary'),
                 ),
-                if (c.hasPendingChanges || c.confirmed == null)
-                  const Text('변경 중인 일정입니다. 일정 확정 후 직원에게 공유됩니다.'),
                 const SizedBox(height: 8),
-                if (errors.isEmpty)
+                if (errors.isNotEmpty) ...[
                   const Text(
-                    '확정을 막는 문제는 없습니다.',
-                    key: Key('dashboard-no-problems'),
-                  )
-                else ...[
-                  const Text(
-                    '먼저 해결해 주세요',
+                    '확정 불가 · 먼저 해결해 주세요',
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   for (final error in errors.take(3)) _problem(error, missing),
@@ -154,20 +150,21 @@ class _AdminTransportDashboardState extends State<AdminTransportDashboard> {
                       ],
                     ),
                 ],
-                if (c.planningWarnings.isNotEmpty)
-                  Text(
-                    '방문 시간 미입력 ${c.planningWarnings.length}코스 · ${errors.isEmpty ? '확정 가능' : '참고 사항'}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
                 const SizedBox(height: 12),
-                TextField(
-                  key: const Key('dashboard-search'),
-                  decoration: const InputDecoration(
-                    labelText: '직원·이용자 이름 검색',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    child: TextField(
+                      key: const Key('dashboard-search'),
+                      decoration: const InputDecoration(
+                        labelText: '직원·이용자 이름 검색',
+                        prefixIcon: Icon(Icons.search),
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) => setState(() => query = value),
+                    ),
                   ),
-                  onChanged: (value) => setState(() => query = value),
                 ),
                 const SizedBox(height: 8),
                 const Text(
@@ -203,7 +200,7 @@ class _AdminTransportDashboardState extends State<AdminTransportDashboard> {
                   : c.catalog.passengers
                         .where(
                           (p) =>
-                              matches(p.name) &&
+                              matches(displayName(p.name)) &&
                               routes.any(
                                 (r) =>
                                     r.passengerIds.contains(p.id) ||
@@ -236,16 +233,16 @@ class _AdminTransportDashboardState extends State<AdminTransportDashboard> {
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: ListTile(
                   key: ValueKey('dashboard-staff-${person.id}'),
-                  title: Text(person.name),
+                  title: Text(displayName(person.name)),
                   subtitle: Text(
                     [
                       if (routes.isEmpty)
-                        status
+                        '이용자 0명 · $status'
                       else
                         for (final r in routes)
-                          '${c.baseRoute(r.baseRouteId).name} · ${c.vehicle(r.vehicleId).name} · ${r.passengerIds.length}/${c.vehicle(r.vehicleId).passengerCapacity}명 · $status',
+                          '${displayName(c.baseRoute(r.baseRouteId).name)} · ${displayName(c.vehicle(r.vehicleId).name)}\n이용자 ${r.passengerIds.length}/${c.vehicle(r.vehicleId).passengerCapacity}명 · $status',
                       if (passenger != null)
-                        '${passenger.name} · ${assigned.contains(passenger.id)
+                        '${displayName(passenger.name)} · ${assigned.contains(passenger.id)
                             ? '담당 이용자'
                             : c.draft.absentIds.contains(passenger.id)
                             ? '결석'
@@ -305,7 +302,7 @@ class _AdminTransportDashboardState extends State<AdminTransportDashboard> {
         : c.catalog.passengers
               .where(
                 (p) =>
-                    matches(p.name) &&
+                    matches(displayName(p.name)) &&
                     routes.any(
                       (r) =>
                           r.passengerIds.contains(p.id) ||
@@ -377,18 +374,16 @@ class _AdminTransportDashboardState extends State<AdminTransportDashboard> {
         ? '배정 불가'
         : routes.isEmpty
         ? '담당 코스 없음'
-        : routes.any((r) => c.pendingTimeReviewRouteIds.contains(r.baseRouteId))
-        ? '방문 시간 확인 필요'
         : '배정됨';
     final cells = <Widget>[
       Column(
         key: ValueKey('dashboard-staff-${person.id}'),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(person.name),
+          Text(displayName(person.name)),
           if (selection.passengerId != null)
             Text(
-              '${c.passenger(selection.passengerId!).name} · ${c.draft.absentIds.contains(selection.passengerId)
+              '${displayName(c.passenger(selection.passengerId!).name)} · ${c.draft.absentIds.contains(selection.passengerId)
                   ? '결석'
                   : c.draft.excludedIds.contains(selection.passengerId)
                   ? '제외'
@@ -405,7 +400,7 @@ class _AdminTransportDashboardState extends State<AdminTransportDashboard> {
             : routes
                   .map(
                     (r) =>
-                        '${c.baseRoute(r.baseRouteId).name}\n${c.vehicle(r.vehicleId).name}',
+                        '${displayName(c.baseRoute(r.baseRouteId).name)}\n${displayName(c.vehicle(r.vehicleId).name)}',
                   )
                   .join('\n'),
       ),
@@ -421,6 +416,20 @@ class _AdminTransportDashboardState extends State<AdminTransportDashboard> {
       ),
       Row(
         children: [
+          Icon(
+            c.isStaffAbsent(person.id) || !c.staffAvailable(person)
+                ? Icons.warning_amber
+                : routes.isEmpty
+                ? Icons.person_outline
+                : Icons.check_circle_outline,
+            size: 18,
+            color: c.isStaffAbsent(person.id) || !c.staffAvailable(person)
+                ? Theme.of(context).colorScheme.error
+                : routes.isEmpty
+                ? Theme.of(context).colorScheme.onSurfaceVariant
+                : Colors.teal,
+          ),
+          const SizedBox(width: 6),
           Expanded(child: Text(status)),
           const Icon(Icons.chevron_right, size: 18),
         ],
@@ -465,9 +474,7 @@ class _AdminTransportDashboardState extends State<AdminTransportDashboard> {
                       .contains(missingPerson),
             )
             .firstOrNull;
-    final title = error.contains('예상 시각 재검토')
-        ? '${c.baseRoute(route!.baseRouteId).name}: 방문 시간을 확인해 주세요.'
-        : missingPerson != null
+    final title = missingPerson != null
         ? '배정되지 않은 이용자 ${missing.length}명을 확인해 주세요.'
         : easyScheduleMessage(error);
     return ListTile(

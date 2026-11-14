@@ -93,7 +93,7 @@ void main() {
         '가상 직원 20',
       );
       await tester.pumpAndSettle();
-      expect(find.text('가상 20코스\n가상 차량 20'), findsOneWidget);
+      expect(find.text('20코스\n차량 20'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('dashboard-staff-s20')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('staff-detail-s20')), findsOneWidget);
@@ -115,8 +115,8 @@ void main() {
         '가상 이용자 80',
       );
       await tester.pumpAndSettle();
-      expect(find.text('가상 직원 20'), findsOneWidget);
-      expect(find.text('가상 20코스\n가상 차량 20'), findsOneWidget);
+      expect(find.text('직원 20'), findsOneWidget);
+      expect(find.text('20코스\n차량 20'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('dashboard-staff-s20')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('staff-detail-s20')), findsOneWidget);
@@ -140,7 +140,7 @@ void main() {
       await tester.tap(move);
       await tester.pumpAndSettle();
       expect(find.textContaining('현재 4/6명 · 이동 후 5명').first, findsOneWidget);
-      expect(find.textContaining('직원 총 4명 · 가상 차량 2 · 근무 가능'), findsOneWidget);
+      expect(find.textContaining('직원 총 4명 · 차량 2 · 근무 가능'), findsOneWidget);
       await tester.tap(
         find.byKey(const ValueKey('reassign-target-p1-morning-2')),
       );
@@ -162,7 +162,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('dashboard-staff-s2')), findsOneWidget);
-      expect(find.textContaining('변경 중인 일정'), findsOneWidget);
+      expect(find.text('미확정 일정'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -189,7 +189,7 @@ void main() {
         '가상 이용자 80',
       );
       await tester.pumpAndSettle();
-      expect(find.text('가상 이용자 80 · 결석'), findsOneWidget);
+      expect(find.text('이용자 80 · 결석'), findsOneWidget);
       expect(find.byKey(const ValueKey('dashboard-staff-s20')), findsOneWidget);
       expect(repository.requests, isEmpty);
       expect(tester.takeException(), isNull);

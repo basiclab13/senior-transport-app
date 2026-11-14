@@ -121,7 +121,7 @@ void main() {
     c.selectPeriod(TransportPeriod.afternoon);
     c.markAbsent('p1');
     now = DateTime.parse('2026-11-13T10:00:00Z');
-    c.setVisitMinute('afternoon-a', 'p2', 1000);
+    c.reorder('afternoon-a', 0, 1);
     final edited = c.draft;
     expect(dateKey(c.selectedDate), '2026-11-18');
     expect(c.period, TransportPeriod.afternoon);

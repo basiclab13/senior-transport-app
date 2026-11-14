@@ -4,6 +4,7 @@ const {validateRequest,validateSchedule,safeViolation}=require('./validation');
 const {absenceData}=require('./staff-absence-service');
 const {validateExistingSchedule}=require('./existing-schedule');
 const {geometryForCatalog,distanceHint,compareDistance,measuredReasons,evaluateReassignment,REASSIGNMENT_POLICY,orderOnlyRoutes,totalDistance}=require('./schedule-distance');
+const {previewRequest}=require('./catalog-preview-context');
 
 function guardSuggestionEnvironment(db,env=process.env) {
   if(env.FUNCTIONS_EMULATOR!=='true'||env.GCLOUD_PROJECT!=='demo-senior-transport'||
@@ -22,7 +23,7 @@ function validateEstimates(data) {
       !r.passengerIds.includes(id)||!Number.isInteger(t)||t<0||t>=1440)||
       (sources!==undefined&&(!sources||typeof sources!=='object'||Array.isArray(sources)||Object.entries(sources).some(([id,s])=>
         !Object.hasOwn(times,id)||!['manual','fixedInterval'].includes(s))))) {
-      throw new HttpsError('invalid-argument','초안의 예상 시각·출처 형식을 확인해 주세요.');
+      throw new HttpsError('invalid-argument','시간 기록의 형식과 입력 방식을 확인해 주세요.');
     }
   }
 }
@@ -82,11 +83,10 @@ function assembleSuggestion(input,answer,catalog,absentStaffIds) {
   const candidate={...input,routes};
   validateSchedule(structural(candidate),catalog);
   if(routes.some(r=>absentStaffIds.includes(r.staffId)))invalid('STAFF_ABSENT');
-  const warnings=[];
-  for(const r of routes) {
-    try{validateSchedule({...structural(candidate),routes:routes.map(other=>other===r?r:{...other,estimatedVisitMinutes:{},estimatedVisitSources:{}})},catalog);}
-    catch{warnings.push(`${catalog.baseRoutes.find(b=>b.id===r.baseRouteId).name}: 방문 순서와 기존 예상 시각을 재검토해 주세요.`);}
-  }
+  // Validate preserved records without imposing time order/window constraints.
+  validateSchedule(candidate,catalog);
+  const warnings=input.period==='morning'&&routes.some((r,i)=>JSON.stringify(r.passengerIds)!==JSON.stringify(input.routes[i].passengerIds))
+    ? ['약속 시간 조정이 필요할 수 있으니 확인해 주세요.']:[];
   return {routes,reasons:answer.reasons,warnings};
 }
 function suggestionFailureSummary(input,answer,error,availableStaffCount) {
@@ -97,13 +97,18 @@ function suggestionFailureSummary(input,answer,error,availableStaffCount) {
     returnedPassengerCount:returned?.every(r=>Array.isArray(r?.passengerIds))?returned.reduce((sum,r)=>sum+r.passengerIds.length,0):null,
     availableStaffCount,insufficientAvailableStaff:availableStaffCount<input.routes.length};
 }
-async function suggest(db,uid,input,{generate,env=process.env,onStage=()=>{},onValidationFailure=()=>{}}={}) {
+async function suggest(db,uid,input,options={}) {
+  guardSuggestionEnvironment(db,options.env||process.env);
+  const request=previewRequest(input);
+  const result=await suggestCore(db,uid,request.schedule,{...options,...(request.contextReader?{contextReader:request.contextReader}:{})});
+  return request.contextReader?{...result,previewContext:input.previewContext}:result;
+}
+async function suggestCore(db,uid,input,{generate,onStage=()=>{},onValidationFailure=()=>{},contextReader=readContext}={}) {
   onStage('validate-request');
-  guardSuggestionEnvironment(db,env);
   if(!uid)throw new HttpsError('unauthenticated','로그인이 필요합니다.');
   validateRequest(input);
   onStage('read-context');
-  const initial=await readContext(db,uid,input);
+  const initial=await contextReader(db,uid,input);
   // The incoming draft may still contain an absent/off-duty owner. Allow the
   // AI to replace that owner, but do not allow malformed routes or lost people.
   onStage('validate-draft');
@@ -143,7 +148,7 @@ async function suggest(db,uid,input,{generate,env=process.env,onStage=()=>{},onV
     throw error;
   }
   onStage('recheck-context');
-  const latest=await readContext(db,uid,input);
+  const latest=await contextReader(db,uid,input);
   if(JSON.stringify(initial)!==JSON.stringify(latest))throw new HttpsError('aborted','추천 중 기본 데이터나 결근 상태가 변경되었습니다. 다시 요청해 주세요.');
   const distanceComparison=compareDistance(input.routes,result.routes,geometry);
   // Unverified LLM distance claims must not contradict measured results in UI.
@@ -154,4 +159,4 @@ async function suggest(db,uid,input,{generate,env=process.env,onStage=()=>{},onV
     routes:result.routes.map(r=>({baseRouteId:r.baseRouteId,staffId:r.staffId,passengerIds:r.passengerIds})),
     date:input.date,period:input.period,catalogVersion:input.catalogVersion,expectedVersion:input.expectedVersion};
 }
-module.exports={suggest,assembleSuggestion,guardSuggestionEnvironment,suggestionFailureSummary};
+module.exports={suggest,suggestCore,assembleSuggestion,guardSuggestionEnvironment,suggestionFailureSummary};

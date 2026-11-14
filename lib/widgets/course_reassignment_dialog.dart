@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../utils/display_wording.dart';
+
 import '../models/course_reassignment.dart';
 import '../models/schedule_catalog.dart';
 import '../models/transport.dart';
@@ -28,7 +30,7 @@ class _CourseReassignmentDialogState extends State<CourseReassignmentDialog> {
   bool _eligibleOnly = false;
   ScheduleCatalog get catalog => widget.catalog;
   String course(String id) =>
-      catalog.baseRoutes.firstWhere((r) => r.id == id).name;
+      displayName(catalog.baseRoutes.firstWhere((r) => r.id == id).name);
   String? reason(Staff staff) => courseReassignmentBlockReason(
     catalog,
     widget.snapshot,
@@ -44,7 +46,9 @@ class _CourseReassignmentDialogState extends State<CourseReassignmentDialog> {
             .where(
               (s) =>
                   s.id != widget.route.staffId &&
-                  s.name.toLowerCase().contains(_query.trim().toLowerCase()) &&
+                  displayName(s.name)
+                      .toLowerCase()
+                      .contains(displayName(_query.trim()).toLowerCase()) &&
                   (!_eligibleOnly || reason(s) == null),
             )
             .toList()
@@ -78,7 +82,7 @@ class _CourseReassignmentDialogState extends State<CourseReassignmentDialog> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(
-                '${dateKey(widget.snapshot.date)} · ${widget.snapshot.period.label} · ${course(widget.route.baseRouteId)}\n${vehicle.name} · ${widget.route.passengerIds.length}/${vehicle.passengerCapacity}명 · 차량·방문 순서·예상 시각 유지',
+                '${dateKey(widget.snapshot.date)} · ${widget.snapshot.period.label} · ${course(widget.route.baseRouteId)}\n${displayName(vehicle.name)} · ${widget.route.passengerIds.length}/${vehicle.passengerCapacity}명 · 차량·방문 순서 유지',
               ),
             ),
             Padding(
@@ -132,9 +136,9 @@ class _CourseReassignmentDialogState extends State<CourseReassignmentDialog> {
                         return ListTile(
                           key: ValueKey('course-transfer-target-${person.id}'),
                           enabled: blocked == null,
-                          title: Text(person.name),
+                          title: Text(displayName(person.name)),
                           subtitle: Text(
-                            '${available ? '근무 가능' : '근무 불가'} · 현재 이용자 $count명\n${routes.isEmpty ? '기존 코스 없음 · 차량 미배정' : routes.map((r) => '${course(r.baseRouteId)} · ${catalog.vehicles.firstWhere((v) => v.id == r.vehicleId).name}').join(' / ')}\n${blocked ?? '인계 가능 · ${vehicle.name} 승계 · 이동 후 ${widget.route.passengerIds.length}명'}',
+                            '${available ? '근무 가능' : '근무 불가'} · 현재 이용자 $count명\n${routes.isEmpty ? '기존 코스 없음 · 차량 미배정' : routes.map((r) => '${course(r.baseRouteId)} · ${displayName(catalog.vehicles.firstWhere((v) => v.id == r.vehicleId).name)}').join(' / ')}\n${blocked ?? '인계 가능 · ${displayName(vehicle.name)} 유지 · 이동 후 ${widget.route.passengerIds.length}명'}',
                           ),
                           trailing: Icon(
                             blocked == null ? Icons.chevron_right : Icons.block,

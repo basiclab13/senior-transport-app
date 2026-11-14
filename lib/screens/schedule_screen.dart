@@ -8,10 +8,13 @@ import '../services/schedule_selection_policy.dart';
 import '../models/schedule_changes.dart';
 import '../widgets/schedule_change_review.dart';
 import '../widgets/ai_schedule_suggestion_dialog.dart';
-import '../widgets/visit_time_adjustment_dialog.dart';
 import '../utils/schedule_wording.dart';
+import '../utils/admin_schedule_status.dart';
 import 'admin_schedule_view.dart';
 import 'staff_schedule_view.dart';
+import '../services/catalog_preview_repository.dart';
+import 'catalog_preview_screen.dart';
+import '../widgets/app_info_button.dart';
 
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({
@@ -22,6 +25,8 @@ class ScheduleScreen extends StatefulWidget {
     this.authError,
     this.controller,
     this.repository,
+    this.catalogPreviewSource,
+    this.previewControls,
   });
   final AppUser user;
   final Future<void> Function() onSignOut;
@@ -29,6 +34,8 @@ class ScheduleScreen extends StatefulWidget {
   final String? authError;
   final ScheduleController? controller;
   final ScheduleRepository? repository;
+  final CatalogPreviewSource? catalogPreviewSource;
+  final Widget? previewControls;
 
   @override
   State<ScheduleScreen> createState() => _ScheduleScreenState();
@@ -61,6 +68,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Future<void> _confirm() async {
+    if (c.isCatalogPreview) return;
     final snapshot = c.draft;
     final baseline = c.confirmed;
     final catalog = c.catalog;
@@ -78,8 +86,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           height: 380,
           child: Column(
             children: [
-              if (c.timeReviews.isNotEmpty)
-                Text('방문 시간 확인 완료 · ${c.timeReviews.length}코스'),
               Expanded(
                 child: ScheduleChangeReview(
                   catalog: catalog,
@@ -87,7 +93,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   baseline: baseline,
                   changes: changes,
                   remote: c.isRemote,
-                  warnings: c.planningWarnings,
+                  warnings: const <String>[],
                 ),
               ),
             ],
@@ -142,7 +148,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       );
       if (approved != true || !mounted) return;
       c.applyAiSuggestion(suggestion);
-      if (c.pendingTimeReviewRouteIds.isNotEmpty) await _adjustTimes();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -157,31 +162,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 
-  Future<void> _adjustTimes() async {
-    final result = await showDialog<VisitTimeBatchApplication>(
-      context: context,
-      useRootNavigator: false,
-      builder: (_) => VisitTimeAdjustmentDialog(controller: c),
-    );
-    if (result == null || !mounted) return;
-    try {
-      c.applyVisitTimeBatch(
-        result.review,
-        manualOverwriteConfirmed: result.manualConfirmed,
-      );
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('방문 시간을 맞췄습니다. 내용을 확인하고 최종 일정을 확정해 주세요.')),
-      );
-    } on StateError catch (error) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(easyScheduleMessage(error.message))),
-      );
-    }
-  }
-
   void _showValidation() {
-    final errors = c.confirmationErrors;
-    final warnings = c.planningWarnings;
+    final errors = adminBlockingMessages(c);
     showDialog<void>(
       context: context,
       useRootNavigator: false,
@@ -193,9 +175,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           child: ListView(
             children: [
               Text(
-                errors.isEmpty
-                    ? '직원 배정과 차량 정원, 방문 시간을 확인했습니다.'
-                    : '아래 오류를 해결한 뒤 확정해 주세요.',
+                errors.isEmpty ? '확정을 막는 오류가 없습니다.' : '확정 불가 · 아래 오류를 해결해 주세요.',
               ),
               for (final error in errors)
                 Padding(
@@ -207,16 +187,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     ),
                   ),
                 ),
-              if (warnings.isNotEmpty)
-                const Padding(
-                  padding: EdgeInsets.only(top: 16),
-                  child: Text('예상 시각 미입력 안내 (확정 가능)'),
-                ),
-              for (final warning in warnings) Text(warning),
               const SizedBox(height: 16),
-              const Text(
-                '시연 기준: 같은 시간대 코스는 동시에 운행하는 것으로 검증합니다. 정원은 이용자 수 기준입니다.',
-              ),
+              const Text('직원·차량은 오전과 오후에 각각 한 코스만 맡을 수 있습니다.'),
             ],
           ),
         ),
@@ -236,7 +208,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       useRootNavigator: false,
       builder: (context) => AlertDialog(
         title: const Text('최신 일정 다시 불러오기'),
-        content: const Text('현재 선택한 날짜·시간대의 미확정 편집 내용을 폐기하고 서버 최신본을 불러옵니다.'),
+        content: const Text('선택한 일정의 수정 내용을 버리고 저장된 일정을 다시 불러옵니다.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -276,12 +248,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               padding: const EdgeInsets.all(24),
               child: c.loading || c.availabilityLoading
                   ? const CircularProgressIndicator(
-                      semanticsLabel: 'Firestore 일정 조회 중',
+                      semanticsLabel: '송영 일정 확인 중',
                     )
                   : Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(c.dataError ?? c.availabilityError!),
+                        Text(
+                          easyScheduleMessage(
+                            c.dataError ?? c.availabilityError!,
+                          ),
+                        ),
                         TextButton(
                           onPressed: c.retryLoad,
                           child: const Text('다시 불러오기'),
@@ -293,17 +269,54 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         );
       }
       final admin = c.role == UserRole.admin;
-      final errors = admin ? c.confirmationErrors : <String>[];
+      final errors = admin ? adminBlockingMessages(c) : <String>[];
       return Scaffold(
         appBar: AppBar(
-          title: const Text('송영도우미'),
+          title: Text(
+            c.isCatalogPreview
+                ? 'AI 테스트'
+                : admin
+                ? '송영 현황'
+                : '내 송영 일정',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 18),
+          ),
           actions: [
-            TextButton.icon(
-              key: const Key('logout'),
-              onPressed: widget.signingOut ? null : widget.onSignOut,
-              icon: const Icon(Icons.logout),
-              label: Text(widget.signingOut ? '로그아웃 중' : '로그아웃'),
-            ),
+            const AppInfoButton(),
+            if (admin && c.supportsAiSuggestions && !c.isCatalogPreview)
+              _suggestButton(compact: MediaQuery.sizeOf(context).width < 768),
+            if (admin &&
+                !c.isCatalogPreview &&
+                widget.catalogPreviewSource != null)
+              TextButton.icon(
+                key: const Key('open-catalog-preview'),
+                icon: const Icon(Icons.science_outlined),
+                label: const Text('AI 테스트'),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => CatalogPreviewScreen(
+                      user: widget.user,
+                      source: widget.catalogPreviewSource!,
+                      onSignOut: widget.onSignOut,
+                    ),
+                  ),
+                ),
+              ),
+            if (MediaQuery.sizeOf(context).width < 600)
+              IconButton(
+                key: const Key('logout'),
+                tooltip: '로그아웃',
+                icon: const Icon(Icons.logout),
+                onPressed: widget.signingOut ? null : widget.onSignOut,
+              )
+            else
+              TextButton.icon(
+                key: const Key('logout'),
+                onPressed: widget.signingOut ? null : widget.onSignOut,
+                icon: const Icon(Icons.logout),
+                label: Text(widget.signingOut ? '로그아웃 중' : '로그아웃'),
+              ),
           ],
         ),
         body: Center(
@@ -312,29 +325,22 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (c.isCatalogPreview && widget.previewControls != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: widget.previewControls!,
+                  ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        admin ? '송영 현황' : '내 송영 일정',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      if (const bool.fromEnvironment('USE_FIREBASE_EMULATORS'))
-                        const Text('테스트 데이터', style: TextStyle(fontSize: 12)),
-                      Text(
-                        admin
-                            ? '직원별 송영 일정을 확인하고 변경사항을 공유합니다.'
-                            : '내 방문 순서와 업무 사진을 확인합니다.',
-                        style: TextStyle(fontSize: 12),
-                      ),
                       if (admin &&
                           (c.reassignmentNeeded ||
                               c.confirmedReassignmentNeeded))
                         Text(
                           c.confirmedReassignmentNeeded
-                              ? '공유된 일정에 결근 직원의 코스가 있습니다. 다른 직원 배정 필요 · 새 확정 전에는 정상 운행 일정이 아닙니다.'
+                              ? '공유된 결근 코스가 있습니다. 인계 내용을 확인하고 다시 확정해 주세요.'
                               : '결근 직원의 담당 코스를 다른 직원에게 넘겨주세요.',
                           key: const Key('staff-absence-warning'),
                           style: TextStyle(
@@ -344,14 +350,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       if (c.absenceSaving) const Text('결근 상태 저장 중…'),
                       if (c.absenceError != null)
                         Text(
-                          c.absenceError!,
+                          easyScheduleMessage(c.absenceError!),
                           style: TextStyle(
                             color: Theme.of(context).colorScheme.error,
                           ),
                         ),
                       if (widget.authError != null)
                         Text(
-                          widget.authError!,
+                          easyScheduleMessage(widget.authError!),
                           style: const TextStyle(color: Colors.red),
                         ),
                       if (c.saveError != null || c.conflict)
@@ -448,27 +454,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   ),
                 ),
                 const Divider(height: 1),
-                if (admin && c.pendingTimeReviewRouteIds.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 4,
-                    ),
-                    child: OutlinedButton.icon(
-                      key: const Key('adjust-changed-times'),
-                      onPressed:
-                          c.busy ||
-                              c.loading ||
-                              c.conflict ||
-                              c.availabilityLoading ||
-                              c.availabilityError != null ||
-                              c.dataError != null
-                          ? null
-                          : _adjustTimes,
-                      icon: const Icon(Icons.schedule),
-                      label: const Text('변경된 방문 시간 맞추기'),
-                    ),
-                  ),
                 Expanded(
                   child: admin
                       ? AbsorbPointer(
@@ -481,7 +466,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   SafeArea(
                     top: false,
                     child: Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       color: Theme.of(context).colorScheme.surfaceContainer,
                       child: _reviewBar(errors),
                     ),
@@ -517,7 +505,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             onPressed: disabled ? null : _suggest,
             icon: icon,
           )
-        : OutlinedButton.icon(
+        : TextButton.icon(
             key: const Key('suggest-schedule'),
             onPressed: disabled ? null : _suggest,
             icon: icon,
@@ -527,14 +515,22 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   Widget _reviewBar(List<String> errors) => LayoutBuilder(
     builder: (context, size) {
-      final visibleChanges = ScheduleChanges.compare(
-        c.confirmed,
-        c.draft,
-        c.catalog,
-      ).items.isNotEmpty;
+      if (c.isCatalogPreview) {
+        return Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            const Text('이 화면의 변경은 저장·확정되지 않습니다.'),
+            if (c.supportsAiSuggestions) _suggestButton(),
+          ],
+        );
+      }
+      final visibleChanges = hasScheduleContentChanges(c);
+      final warnings = const <String>[];
       final unchanged =
           c.confirmed != null &&
-          !c.hasPendingChanges &&
+          !visibleChanges &&
           !c.confirmedReassignmentNeeded &&
           c.saveError == null &&
           errors.isEmpty &&
@@ -550,31 +546,51 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               size: 20,
             ),
             const SizedBox(width: 8),
-            const Expanded(child: Text('일정 확정 완료 · 변경사항 없음')),
-            if (c.supportsAiSuggestions)
-              _suggestButton(compact: size.maxWidth < 600),
+            Expanded(child: Text(adminScheduleStatus(c))),
+            if (c.hasPendingChanges)
+              TextButton.icon(
+                key: const Key('confirm-schedule'),
+                onPressed: _confirm,
+                icon: const Icon(Icons.check),
+                label: const Text('일정 확인'),
+              ),
+            IconButton(
+              key: const Key('validation-results'),
+              tooltip: warnings.isEmpty ? '검사 결과' : '확인 필요 ${warnings.length}건',
+              onPressed: _showValidation,
+              icon: Icon(
+                warnings.isEmpty
+                    ? Icons.fact_check_outlined
+                    : Icons.info_outline,
+                color: warnings.isEmpty
+                    ? null
+                    : Theme.of(context).colorScheme.tertiary,
+              ),
+            ),
           ],
         );
       }
       final status = Text(
-        c.confirmedReassignmentNeeded
-            ? '공유된 일정에 결근 코스가 있습니다. 다시 확정해 주세요.'
-            : c.confirmed == null
-            ? '작성 중 · 아직 확정하지 않은 일정입니다.'
-            : c.hasPendingChanges && !visibleChanges
-            ? '공유된 일정과 표시 내용이 같습니다.'
-            : c.hasPendingChanges
-            ? '변경 중 · 일정 확정 전까지 직원에게 반영되지 않습니다.'
-            : '일정 확정 완료 · 직원에게 공유되었습니다.',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+        adminScheduleStatus(c),
+        key: const Key('admin-schedule-status'),
+        style: const TextStyle(fontWeight: FontWeight.w600),
       );
-      final validationLabel = errors.isEmpty
-          ? '확정 전 확인 완료'
-          : '확정 전 확인 ${errors.length}건';
+      final validationLabel = errors.isNotEmpty
+          ? '확정 불가 ${errors.length}건'
+          : warnings.isNotEmpty
+          ? '확인 필요 ${warnings.length}건'
+          : '검사 결과';
       final icon = Icon(
-        errors.isEmpty ? Icons.check_circle_outline : Icons.warning_amber,
-        color: errors.isEmpty ? Colors.teal : Colors.red,
+        errors.isNotEmpty
+            ? Icons.error_outline
+            : warnings.isNotEmpty
+            ? Icons.info_outline
+            : Icons.fact_check_outlined,
+        color: errors.isNotEmpty
+            ? Theme.of(context).colorScheme.error
+            : warnings.isNotEmpty
+            ? Theme.of(context).colorScheme.tertiary
+            : null,
       );
       final VoidCallback? onConfirm =
           !c.busy &&
@@ -600,15 +616,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               icon: const Icon(Icons.check),
               label: Text(c.saving ? '일정 확정 중…' : '변경 내용 확인 후 확정'),
             );
-      if (size.maxWidth < 600) {
+      if (size.maxWidth < 768) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            status,
             Row(
               children: [
-                if (c.supportsAiSuggestions) _suggestButton(compact: true),
+                Expanded(child: status),
                 IconButton(
                   key: const Key('validation-results'),
                   tooltip: validationLabel,
@@ -619,21 +634,15 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     child: icon,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(child: confirm),
               ],
             ),
+            confirm,
           ],
         );
       }
-      return Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        spacing: 12,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      return Row(
         children: [
-          status,
-          if (c.supportsAiSuggestions) _suggestButton(),
+          Expanded(child: status),
           TextButton.icon(
             key: const Key('validation-results'),
             onPressed: _showValidation,

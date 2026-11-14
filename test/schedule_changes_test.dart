@@ -129,7 +129,7 @@ void main() {
     );
   });
 
-  test('operating window and estimate edits can be set and cleared', () {
+  test('appointment edits are summarized while legacy operating records stay hidden', () {
     c.setOperatingWindow('morning-a', 480, 540);
     c.setVisitMinute('morning-a', 'p1', 490);
     c.confirm();
@@ -139,18 +139,18 @@ void main() {
     final result = changes(before);
     expect(
       result.items.where((i) => i.kind == ScheduleChangeKind.time).length,
-      2,
+      1,
     );
     expect(
       result.items.any((i) => i.description.contains('08:00–09:00 → 미입력–미입력')),
-      isTrue,
+      isFalse,
     );
   });
 
   test('absence and exclusion restoration show status removal and restored assignments', () {
     c.markAbsent('p1');
     c.excludePassenger('p2');
-    keepReviewedTimes(c);
+
     c.confirm();
     final before = c.confirmed!;
     c.restorePassenger('p1');

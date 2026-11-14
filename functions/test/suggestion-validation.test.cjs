@@ -40,7 +40,7 @@ for(const [name,violation,mutate] of [
   });
   assert.equal(JSON.stringify(f.input),before);
 });
-test('valid 20/80 proposal preserves every rule and manual time while requiring a separate time review',()=>{
+test('valid 20/80 proposal preserves every rule and manual time without requiring a separate time review',()=>{
   const {input,answer}=fixture();
   answer.routes[0].passengerIds.reverse();
   const result=assembleSuggestion(input,answer,catalog,[]);
@@ -49,8 +49,7 @@ test('valid 20/80 proposal preserves every rule and manual time while requiring 
   assert.deepEqual(result.routes[0].estimatedVisitMinutes,input.routes[0].estimatedVisitMinutes);
   assert.equal(result.routes[0].vehicleId,input.routes[0].vehicleId);
   assert.ok(result.warnings.length>0);
-  // The actual publication validator continues rejecting the conflicting times.
-  assert.throws(()=>validateSchedule({...input,routes:result.routes},catalog),e=>safeViolation(e)==='VISIT_TIME_CONFLICT');
+  assert.doesNotThrow(()=>validateSchedule({...input,routes:result.routes},catalog));
 });
 test('shared validator distinguishes vehicle duplication without changing its rejection',()=>{
   const {input}=fixture();input.routes[1].vehicleId='v1';

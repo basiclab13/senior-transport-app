@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../utils/display_wording.dart';
+
 import '../models/transport.dart';
 import '../services/schedule_controller.dart';
 import '../utils/staff_sort.dart';
@@ -31,7 +33,7 @@ class _AdminAssignmentOverviewState extends State<AdminAssignmentOverview> {
   String _query = '';
   ScheduleController get c => widget.controller;
   bool _matches(String name) =>
-      name.toLowerCase().contains(_query.trim().toLowerCase());
+      name.toLowerCase().contains(displayName(_query.trim()).toLowerCase());
 
   void _open(RouteAssignment route, [String? passengerId]) => Navigator.pop(
     context,
@@ -77,11 +79,11 @@ class _AdminAssignmentOverviewState extends State<AdminAssignmentOverview> {
               .where(
                 (p) =>
                     (expected.contains(p.id) || assigned.contains(p.id)) &&
-                    (_matches(p.name) ||
+                    (_matches(displayName(p.name)) ||
                         c.draft.routes.any(
                           (r) =>
                               r.passengerIds.contains(p.id) &&
-                              _matches(c.staff(r.staffId).name),
+                              _matches(displayName(c.staff(r.staffId).name)),
                         )),
               )
               .toList();
@@ -89,12 +91,13 @@ class _AdminAssignmentOverviewState extends State<AdminAssignmentOverview> {
               c.catalog.staff
                   .where(
                     (s) =>
-                        _matches(s.name) ||
+                        _matches(displayName(s.name)) ||
                         c
                             .routesForStaff(s.id)
                             .any(
                               (r) => r.passengerIds.any(
-                                (id) => _matches(c.passenger(id).name),
+                                (id) =>
+                                    _matches(displayName(c.passenger(id).name)),
                               ),
                             ),
                   )
@@ -146,13 +149,6 @@ class _AdminAssignmentOverviewState extends State<AdminAssignmentOverview> {
                   key: const Key('overview-staff-absence'),
                 ),
               ),
-              if (c.pendingTimeReviewRouteIds.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    '방문 시간 확인 필요 ${c.pendingTimeReviewRouteIds.length}코스 · 직원 상세에서 검토해 주세요.',
-                  ),
-                ),
               if (c.validationErrors.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -250,7 +246,7 @@ class _AdminAssignmentOverviewState extends State<AdminAssignmentOverview> {
       child: routes.isEmpty
           ? ListTile(
               dense: true,
-              title: Text(staff.name),
+              title: Text(displayName(staff.name)),
               subtitle: Text('$work · 미배정'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () =>
@@ -272,19 +268,24 @@ class _AdminAssignmentOverviewState extends State<AdminAssignmentOverview> {
                               children: [
                                 SizedBox(
                                   width: 140,
-                                  child: Text('${staff.name}\n$work'),
+                                  child: Text(
+                                    '${displayName(staff.name)}\n$work',
+                                  ),
                                 ),
                                 SizedBox(
                                   width: 160,
                                   child: Text(
-                                    '${c.baseRoute(r.baseRouteId).name}\n${c.vehicle(r.vehicleId).name}',
+                                    '${displayName(c.baseRoute(r.baseRouteId).name)}\n${displayName(c.vehicle(r.vehicleId).name)}',
                                   ),
                                 ),
                                 SizedBox(width: 90, child: _capacity(r)),
                                 Expanded(
                                   child: Text(
                                     r.passengerIds
-                                        .map((id) => c.passenger(id).name)
+                                        .map(
+                                          (id) =>
+                                              displayName(c.passenger(id).name),
+                                        )
                                         .join(' → '),
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
@@ -296,14 +297,17 @@ class _AdminAssignmentOverviewState extends State<AdminAssignmentOverview> {
                           : Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('${staff.name} · $work'),
+                                Text('${displayName(staff.name)} · $work'),
                                 Text(
-                                  '${c.baseRoute(r.baseRouteId).name} · ${c.vehicle(r.vehicleId).name}',
+                                  '${displayName(c.baseRoute(r.baseRouteId).name)} · ${displayName(c.vehicle(r.vehicleId).name)}',
                                 ),
                                 _capacity(r),
                                 Text(
                                   r.passengerIds
-                                      .map((id) => c.passenger(id).name)
+                                      .map(
+                                        (id) =>
+                                            displayName(c.passenger(id).name),
+                                      )
                                       .join(' → '),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
@@ -349,16 +353,16 @@ class _AdminAssignmentOverviewState extends State<AdminAssignmentOverview> {
             key: ValueKey(
               'find-passenger-${passenger.id}-${route.baseRouteId}',
             ),
-            title: Text(passenger.name),
+            title: Text(displayName(passenger.name)),
             subtitle: Text(
-              '${routes.isEmpty ? '$removed · 기본 코스 담당 ' : ''}${c.staff(route.staffId).name} · ${c.baseRoute(route.baseRouteId).name}\n${passenger.address}',
+              '${routes.isEmpty ? '$removed · 기본 코스 담당 ' : ''}${displayName(c.staff(route.staffId).name)} · ${displayName(c.baseRoute(route.baseRouteId).name)}\n${passenger.address}',
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => _open(route, passenger.id),
           ),
         if (routes.isEmpty && originals.isEmpty)
           ListTile(
-            title: Text(passenger.name),
+            title: Text(displayName(passenger.name)),
             subtitle: Text('$removed · 연결된 코스 없음'),
           ),
       ],
