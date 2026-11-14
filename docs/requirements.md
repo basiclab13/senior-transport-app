@@ -97,6 +97,10 @@
 
 ### FR-02. 직원별 송영 일정 조회
 
+직원 중심 관리자 화면과 직원 타임라인의 현재 설계·구현 범위는 [staff-centered-schedules.md](staff-centered-schedules.md)를 참고한다. 예상 시각은 관리자 입력값이며 실제 운행 시각을 보장하지 않는다.
+
+Firestore 영구 저장·직원별 실시간 공유·서버 권한 검증과 로컬 Emulator 실행은 [firestore-schedules.md](firestore-schedules.md)에 정리한다.
+
 **목적:** 직원이 자신의 최신 송영 일정을 간편하게 확인하도록 한다.
 
 **세부 요구사항**

@@ -1,0 +1,747 @@
+{
+  "scenario": "absence-capacity-improvement",
+  "input": {
+    "date": "2026-12-07",
+    "period": "morning",
+    "catalogVersion": "ai-test-25x80-v1",
+    "requestId": "ai25-local-preview",
+    "expectedVersion": 0,
+    "absentIds": [
+      "p2"
+    ],
+    "excludedIds": [],
+    "expectedAvailabilityVersions": {
+      "s1": 0,
+      "s2": 0,
+      "s3": 0,
+      "s4": 0,
+      "s5": 0,
+      "s6": 0,
+      "s7": 0,
+      "s8": 0,
+      "s9": 0,
+      "s10": 0,
+      "s11": 0,
+      "s12": 0,
+      "s13": 0,
+      "s14": 0,
+      "s15": 0,
+      "s16": 0,
+      "s17": 0,
+      "s18": 0,
+      "s19": 0,
+      "s20": 0,
+      "s21": 0,
+      "s22": 0,
+      "s23": 0,
+      "s24": 0,
+      "s25": 0
+    },
+    "routes": [
+      {
+        "baseRouteId": "morning-ai-01",
+        "staffId": "s1",
+        "vehicleId": "v1",
+        "passengerIds": [
+          "p5",
+          "p3",
+          "p4"
+        ],
+        "estimatedVisitMinutes": {
+          "p3": 550,
+          "p4": 555,
+          "p5": 540
+        },
+        "estimatedVisitSources": {
+          "p3": "manual",
+          "p4": "manual",
+          "p5": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      },
+      {
+        "baseRouteId": "morning-ai-02",
+        "staffId": "s2",
+        "vehicleId": "v2",
+        "passengerIds": [
+          "p1",
+          "p6",
+          "p7",
+          "p8"
+        ],
+        "estimatedVisitMinutes": {
+          "p6": 545,
+          "p7": 550,
+          "p8": 555,
+          "p1": 540
+        },
+        "estimatedVisitSources": {
+          "p6": "manual",
+          "p7": "manual",
+          "p8": "manual",
+          "p1": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      },
+      {
+        "baseRouteId": "morning-ai-03",
+        "staffId": "s3",
+        "vehicleId": "v3",
+        "passengerIds": [
+          "p9",
+          "p10",
+          "p11",
+          "p12"
+        ],
+        "estimatedVisitMinutes": {
+          "p9": 540,
+          "p10": 545,
+          "p11": 550,
+          "p12": 555
+        },
+        "estimatedVisitSources": {
+          "p9": "manual",
+          "p10": "manual",
+          "p11": "manual",
+          "p12": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      },
+      {
+        "baseRouteId": "morning-ai-04",
+        "staffId": "s4",
+        "vehicleId": "v4",
+        "passengerIds": [
+          "p13",
+          "p14",
+          "p15",
+          "p16"
+        ],
+        "estimatedVisitMinutes": {
+          "p13": 540,
+          "p14": 545,
+          "p15": 550,
+          "p16": 555
+        },
+        "estimatedVisitSources": {
+          "p13": "manual",
+          "p14": "manual",
+          "p15": "manual",
+          "p16": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      },
+      {
+        "baseRouteId": "morning-ai-05",
+        "staffId": "s5",
+        "vehicleId": "v5",
+        "passengerIds": [
+          "p17",
+          "p18",
+          "p19",
+          "p20"
+        ],
+        "estimatedVisitMinutes": {
+          "p17": 540,
+          "p18": 545,
+          "p19": 550,
+          "p20": 555
+        },
+        "estimatedVisitSources": {
+          "p17": "manual",
+          "p18": "manual",
+          "p19": "manual",
+          "p20": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      },
+      {
+        "baseRouteId": "morning-ai-06",
+        "staffId": "s6",
+        "vehicleId": "v6",
+        "passengerIds": [
+          "p21",
+          "p22",
+          "p23",
+          "p24"
+        ],
+        "estimatedVisitMinutes": {
+          "p21": 540,
+          "p22": 545,
+          "p23": 550,
+          "p24": 555
+        },
+        "estimatedVisitSources": {
+          "p21": "manual",
+          "p22": "manual",
+          "p23": "manual",
+          "p24": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      },
+      {
+        "baseRouteId": "morning-ai-07",
+        "staffId": "s7",
+        "vehicleId": "v7",
+        "passengerIds": [
+          "p25",
+          "p26",
+          "p27",
+          "p28"
+        ],
+        "estimatedVisitMinutes": {
+          "p25": 540,
+          "p26": 545,
+          "p27": 550,
+          "p28": 555
+        },
+        "estimatedVisitSources": {
+          "p25": "manual",
+          "p26": "manual",
+          "p27": "manual",
+          "p28": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      },
+      {
+        "baseRouteId": "morning-ai-08",
+        "staffId": "s8",
+        "vehicleId": "v8",
+        "passengerIds": [
+          "p29",
+          "p30",
+          "p31",
+          "p32"
+        ],
+        "estimatedVisitMinutes": {
+          "p29": 540,
+          "p30": 545,
+          "p31": 550,
+          "p32": 555
+        },
+        "estimatedVisitSources": {
+          "p29": "manual",
+          "p30": "manual",
+          "p31": "manual",
+          "p32": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      },
+      {
+        "baseRouteId": "morning-ai-09",
+        "staffId": "s9",
+        "vehicleId": "v9",
+        "passengerIds": [
+          "p33",
+          "p34",
+          "p35",
+          "p36"
+        ],
+        "estimatedVisitMinutes": {
+          "p33": 540,
+          "p34": 545,
+          "p35": 550,
+          "p36": 555
+        },
+        "estimatedVisitSources": {
+          "p33": "manual",
+          "p34": "manual",
+          "p35": "manual",
+          "p36": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      },
+      {
+        "baseRouteId": "morning-ai-10",
+        "staffId": "s10",
+        "vehicleId": "v10",
+        "passengerIds": [
+          "p37",
+          "p38",
+          "p39",
+          "p40"
+        ],
+        "estimatedVisitMinutes": {
+          "p37": 540,
+          "p38": 545,
+          "p39": 550,
+          "p40": 555
+        },
+        "estimatedVisitSources": {
+          "p37": "manual",
+          "p38": "manual",
+          "p39": "manual",
+          "p40": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      },
+      {
+        "baseRouteId": "morning-ai-11",
+        "staffId": "s11",
+        "vehicleId": "v11",
+        "passengerIds": [
+          "p41",
+          "p42",
+          "p43",
+          "p44"
+        ],
+        "estimatedVisitMinutes": {
+          "p41": 540,
+          "p42": 545,
+          "p43": 550,
+          "p44": 555
+        },
+        "estimatedVisitSources": {
+          "p41": "manual",
+          "p42": "manual",
+          "p43": "manual",
+          "p44": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      },
+      {
+        "baseRouteId": "morning-ai-12",
+        "staffId": "s12",
+        "vehicleId": "v12",
+        "passengerIds": [
+          "p45",
+          "p46",
+          "p47",
+          "p48"
+        ],
+        "estimatedVisitMinutes": {
+          "p45": 540,
+          "p46": 545,
+          "p47": 550,
+          "p48": 555
+        },
+        "estimatedVisitSources": {
+          "p45": "manual",
+          "p46": "manual",
+          "p47": "manual",
+          "p48": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      },
+      {
+        "baseRouteId": "morning-ai-13",
+        "staffId": "s13",
+        "vehicleId": "v13",
+        "passengerIds": [
+          "p49",
+          "p50",
+          "p51",
+          "p52"
+        ],
+        "estimatedVisitMinutes": {
+          "p49": 540,
+          "p50": 545,
+          "p51": 550,
+          "p52": 555
+        },
+        "estimatedVisitSources": {
+          "p49": "manual",
+          "p50": "manual",
+          "p51": "manual",
+          "p52": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      },
+      {
+        "baseRouteId": "morning-ai-14",
+        "staffId": "s14",
+        "vehicleId": "v14",
+        "passengerIds": [
+          "p53",
+          "p54",
+          "p55",
+          "p56"
+        ],
+        "estimatedVisitMinutes": {
+          "p53": 540,
+          "p54": 545,
+          "p55": 550,
+          "p56": 555
+        },
+        "estimatedVisitSources": {
+          "p53": "manual",
+          "p54": "manual",
+          "p55": "manual",
+          "p56": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      },
+      {
+        "baseRouteId": "morning-ai-15",
+        "staffId": "s15",
+        "vehicleId": "v15",
+        "passengerIds": [
+          "p57",
+          "p58",
+          "p59",
+          "p60"
+        ],
+        "estimatedVisitMinutes": {
+          "p57": 540,
+          "p58": 545,
+          "p59": 550,
+          "p60": 555
+        },
+        "estimatedVisitSources": {
+          "p57": "manual",
+          "p58": "manual",
+          "p59": "manual",
+          "p60": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      },
+      {
+        "baseRouteId": "morning-ai-16",
+        "staffId": "s16",
+        "vehicleId": "v16",
+        "passengerIds": [
+          "p61",
+          "p62",
+          "p63",
+          "p64"
+        ],
+        "estimatedVisitMinutes": {
+          "p61": 540,
+          "p62": 545,
+          "p63": 550,
+          "p64": 555
+        },
+        "estimatedVisitSources": {
+          "p61": "manual",
+          "p62": "manual",
+          "p63": "manual",
+          "p64": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      },
+      {
+        "baseRouteId": "morning-ai-17",
+        "staffId": "s17",
+        "vehicleId": "v17",
+        "passengerIds": [
+          "p65",
+          "p66",
+          "p67",
+          "p68"
+        ],
+        "estimatedVisitMinutes": {
+          "p65": 540,
+          "p66": 545,
+          "p67": 550,
+          "p68": 555
+        },
+        "estimatedVisitSources": {
+          "p65": "manual",
+          "p66": "manual",
+          "p67": "manual",
+          "p68": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      },
+      {
+        "baseRouteId": "morning-ai-18",
+        "staffId": "s18",
+        "vehicleId": "v18",
+        "passengerIds": [
+          "p69",
+          "p70",
+          "p71",
+          "p72"
+        ],
+        "estimatedVisitMinutes": {
+          "p69": 540,
+          "p70": 545,
+          "p71": 550,
+          "p72": 555
+        },
+        "estimatedVisitSources": {
+          "p69": "manual",
+          "p70": "manual",
+          "p71": "manual",
+          "p72": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      },
+      {
+        "baseRouteId": "morning-ai-19",
+        "staffId": "s19",
+        "vehicleId": "v19",
+        "passengerIds": [
+          "p73",
+          "p74",
+          "p75",
+          "p76"
+        ],
+        "estimatedVisitMinutes": {
+          "p73": 540,
+          "p74": 545,
+          "p75": 550,
+          "p76": 555
+        },
+        "estimatedVisitSources": {
+          "p73": "manual",
+          "p74": "manual",
+          "p75": "manual",
+          "p76": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      },
+      {
+        "baseRouteId": "morning-ai-20",
+        "staffId": "s20",
+        "vehicleId": "v20",
+        "passengerIds": [
+          "p77",
+          "p78",
+          "p79",
+          "p80"
+        ],
+        "estimatedVisitMinutes": {
+          "p77": 540,
+          "p78": 545,
+          "p79": 550,
+          "p80": 555
+        },
+        "estimatedVisitSources": {
+          "p77": "manual",
+          "p78": "manual",
+          "p79": "manual",
+          "p80": "manual"
+        },
+        "startMinute": 530,
+        "endMinute": 580
+      }
+    ]
+  },
+  "proposal": {
+    "routes": [
+      {
+        "baseRouteId": "morning-ai-01",
+        "staffId": "s1",
+        "passengerIds": [
+          "p5",
+          "p1",
+          "p3",
+          "p4"
+        ]
+      },
+      {
+        "baseRouteId": "morning-ai-02",
+        "staffId": "s2",
+        "passengerIds": [
+          "p6",
+          "p7",
+          "p8"
+        ]
+      },
+      {
+        "baseRouteId": "morning-ai-03",
+        "staffId": "s3",
+        "passengerIds": [
+          "p9",
+          "p10",
+          "p11",
+          "p12"
+        ]
+      },
+      {
+        "baseRouteId": "morning-ai-04",
+        "staffId": "s4",
+        "passengerIds": [
+          "p13",
+          "p14",
+          "p15",
+          "p16"
+        ]
+      },
+      {
+        "baseRouteId": "morning-ai-05",
+        "staffId": "s5",
+        "passengerIds": [
+          "p17",
+          "p18",
+          "p19",
+          "p20"
+        ]
+      },
+      {
+        "baseRouteId": "morning-ai-06",
+        "staffId": "s6",
+        "passengerIds": [
+          "p21",
+          "p22",
+          "p23",
+          "p24"
+        ]
+      },
+      {
+        "baseRouteId": "morning-ai-07",
+        "staffId": "s7",
+        "passengerIds": [
+          "p25",
+          "p26",
+          "p27",
+          "p28"
+        ]
+      },
+      {
+        "baseRouteId": "morning-ai-08",
+        "staffId": "s8",
+        "passengerIds": [
+          "p29",
+          "p30",
+          "p31",
+          "p32"
+        ]
+      },
+      {
+        "baseRouteId": "morning-ai-09",
+        "staffId": "s9",
+        "passengerIds": [
+          "p33",
+          "p34",
+          "p35",
+          "p36"
+        ]
+      },
+      {
+        "baseRouteId": "morning-ai-10",
+        "staffId": "s10",
+        "passengerIds": [
+          "p37",
+          "p38",
+          "p39",
+          "p40"
+        ]
+      },
+      {
+        "baseRouteId": "morning-ai-11",
+        "staffId": "s11",
+        "passengerIds": [
+          "p41",
+          "p42",
+          "p43",
+          "p44"
+        ]
+      },
+      {
+        "baseRouteId": "morning-ai-12",
+        "staffId": "s12",
+        "passengerIds": [
+          "p45",
+          "p46",
+          "p47",
+          "p48"
+        ]
+      },
+      {
+        "baseRouteId": "morning-ai-13",
+        "staffId": "s13",
+        "passengerIds": [
+          "p49",
+          "p50",
+          "p51",
+          "p52"
+        ]
+      },
+      {
+        "baseRouteId": "morning-ai-14",
+        "staffId": "s14",
+        "passengerIds": [
+          "p53",
+          "p54",
+          "p55",
+          "p56"
+        ]
+      },
+      {
+        "baseRouteId": "morning-ai-15",
+        "staffId": "s15",
+        "passengerIds": [
+          "p57",
+          "p58",
+          "p59",
+          "p60"
+        ]
+      },
+      {
+        "baseRouteId": "morning-ai-16",
+        "staffId": "s16",
+        "passengerIds": [
+          "p61",
+          "p62",
+          "p63",
+          "p64"
+        ]
+      },
+      {
+        "baseRouteId": "morning-ai-17",
+        "staffId": "s17",
+        "passengerIds": [
+          "p65",
+          "p66",
+          "p67",
+          "p68"
+        ]
+      },
+      {
+        "baseRouteId": "morning-ai-18",
+        "staffId": "s18",
+        "passengerIds": [
+          "p69",
+          "p70",
+          "p71",
+          "p72"
+        ]
+      },
+      {
+        "baseRouteId": "morning-ai-19",
+        "staffId": "s19",
+        "passengerIds": [
+          "p73",
+          "p74",
+          "p75",
+          "p76"
+        ]
+      },
+      {
+        "baseRouteId": "morning-ai-20",
+        "staffId": "s20",
+        "passengerIds": [
+          "p77",
+          "p78",
+          "p79",
+          "p80"
+        ]
+      }
+    ],
+    "reasons": [
+      "고정된 가상 검증 응답"
+    ]
+  },
+  "absentStaffIds": []
+}

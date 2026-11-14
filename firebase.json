@@ -1,0 +1,94 @@
+{
+    "flutter":  {
+                    "platforms":  {
+                                      "android":  {
+                                                      "default":  {
+                                                                      "projectId":  "senior-transport-app",
+                                                                      "appId":  "1:387017587964:android:19446d043eb0ae1eb8ab79",
+                                                                      "fileOutput":  "android/app/google-services.json"
+                                                                  }
+                                                  },
+                                      "dart":  {
+                                                   "lib/firebase_options.dart":  {
+                                                                                     "projectId":  "senior-transport-app",
+                                                                                     "configurations":  {
+                                                                                                            "android":  "1:387017587964:android:19446d043eb0ae1eb8ab79",
+                                                                                                            "ios":  "1:387017587964:ios:2b2b276cdcfd05dcb8ab79",
+                                                                                                            "macos":  "1:387017587964:ios:2b2b276cdcfd05dcb8ab79",
+                                                                                                            "web":  "1:387017587964:web:9ba0fe6c36e11e8bb8ab79",
+                                                                                                            "windows":  "1:387017587964:web:a6dc3372ebfc9da4b8ab79"
+                                                                                                        }
+                                                                                 }
+                                               }
+                                  }
+                },
+    "storage": { "rules": "storage.rules" },
+    "firestore":  {
+                      "rules":  "firestore.rules"
+                  },
+    "functions":  {
+                      "predeploy": ["node tools/verify-functions-build.cjs"],
+                      "runtime":  "nodejs22",
+                      "source":  "functions",
+                      "ignore":  [
+                                     "node_modules",
+                                     "test",
+                                     "*.log",
+                                     ".secret.local",
+                                     ".env.local"
+                                 ]
+                  },
+    "hosting": {
+        "public": "build/web",
+        "ignore": [
+            "firebase.json",
+            "**/.*",
+            "**/node_modules/**",
+            "**/*.map",
+            "**/*.log",
+            "**/*.pem",
+            "**/*.key",
+            "**/*.p12",
+            "**/*.pfx",
+            "**/*service-account*.json",
+            "**/*service_account*.json",
+            "**/*firebase-adminsdk*.json"
+        ],
+        "rewrites": [
+            { "regex": "^.*$", "destination": "/index.html" }
+        ],
+        "headers": [
+            {
+                "regex": "^.*$",
+                "headers": [
+                    { "key": "Cache-Control", "value": "no-cache, max-age=0, must-revalidate" },
+                    { "key": "X-Content-Type-Options", "value": "nosniff" }
+                ]
+            }
+        ],
+        "predeploy": ["node tools/verify-hosting-build.cjs"]
+    },
+    "emulators":  {
+                      "storage": { "host": "127.0.0.1", "port": 9199 },
+                      "hosting": {
+                                     "host": "127.0.0.1",
+                                     "port": 5000
+                                 },
+                      "functions":  {
+                                        "host":  "127.0.0.1",
+                                        "port":  5001
+                                    },
+                      "firestore":  {
+                                        "host":  "127.0.0.1",
+                                        "port":  8080
+                                    },
+                      "ui":  {
+                                 "enabled":  false
+                             },
+                      "singleProjectMode":  true,
+                      "auth":  {
+                                   "host":  "127.0.0.1",
+                                   "port":  9099
+                               }
+                  }
+}

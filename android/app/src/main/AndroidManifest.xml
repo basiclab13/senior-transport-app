@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="senior_transport_app"
+        android:label="송영도우미"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

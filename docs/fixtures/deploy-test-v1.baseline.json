@@ -1,0 +1,137 @@
+{
+  "projectId": "senior-transport-app",
+  "databaseId": "(default)",
+  "catalogVersion": "deploy-test-v1",
+  "catalogMetadata": {
+    "ready": true,
+    "fictional": true,
+    "schemaVersion": 1
+  },
+  "collections": {
+    "staff": [
+      {
+        "id": "s1",
+        "name": "김다정",
+        "active": true,
+        "unavailableWeekdays": []
+      },
+      {
+        "id": "s2",
+        "name": "이온유",
+        "active": true,
+        "unavailableWeekdays": []
+      },
+      {
+        "id": "s3",
+        "name": "박여유",
+        "active": true,
+        "unavailableWeekdays": [
+          5
+        ]
+      }
+    ],
+    "vehicles": [
+      {
+        "id": "v1",
+        "name": "햇살 1호",
+        "passengerCapacity": 3
+      },
+      {
+        "id": "v2",
+        "name": "나무 2호",
+        "passengerCapacity": 3
+      },
+      {
+        "id": "v3",
+        "name": "예비 3호",
+        "passengerCapacity": 2
+      }
+    ],
+    "passengers": [
+      {
+        "id": "p1",
+        "name": "가상 어르신 A",
+        "address": "가상마을 햇살길 1",
+        "note": "승하차 시 천천히 안내"
+      },
+      {
+        "id": "p2",
+        "name": "가상 어르신 B",
+        "address": "가상마을 햇살길 2",
+        "note": "도착 후 초인종으로 안내"
+      },
+      {
+        "id": "p3",
+        "name": "가상 어르신 C",
+        "address": "가상마을 햇살길 3",
+        "note": "현관 앞에서 탑승"
+      },
+      {
+        "id": "p4",
+        "name": "가상 어르신 D",
+        "address": "가상마을 나무길 1",
+        "note": "승하차 시 천천히 안내"
+      },
+      {
+        "id": "p5",
+        "name": "가상 어르신 E",
+        "address": "가상마을 나무길 2",
+        "note": "정문 앞에서 탑승"
+      }
+    ],
+    "baseRoutes": [
+      {
+        "id": "morning-a",
+        "name": "햇살 A코스",
+        "period": "morning",
+        "staffId": "s1",
+        "vehicleId": "v1",
+        "passengerIds": [
+          "p1",
+          "p2",
+          "p3"
+        ]
+      },
+      {
+        "id": "morning-b",
+        "name": "나무 B코스",
+        "period": "morning",
+        "staffId": "s2",
+        "vehicleId": "v2",
+        "passengerIds": [
+          "p4",
+          "p5"
+        ]
+      },
+      {
+        "id": "afternoon-a",
+        "name": "햇살 A코스",
+        "period": "afternoon",
+        "staffId": "s1",
+        "vehicleId": "v1",
+        "passengerIds": [
+          "p3",
+          "p1",
+          "p2"
+        ]
+      },
+      {
+        "id": "afternoon-b",
+        "name": "나무 B코스",
+        "period": "afternoon",
+        "staffId": "s2",
+        "vehicleId": "v2",
+        "passengerIds": [
+          "p5",
+          "p4"
+        ]
+      }
+    ]
+  },
+  "settings": {
+    "documentPath": "settings/schedules",
+    "fields": {
+      "catalogVersion": "deploy-test-v1"
+    }
+  }
+}

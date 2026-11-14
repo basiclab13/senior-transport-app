@@ -1,0 +1,580 @@
+{
+  "catalogVersion": "demo-10x24-v1",
+  "metadata": {
+    "schemaVersion": 1,
+    "ready": true,
+    "fictional": true,
+    "testData": true,
+    "fixture": {
+      "id": "demo-10x24-v1",
+      "revision": 1,
+      "provenance": "procedural-fiction-only",
+      "locationModel": "fictional-cartesian-km-not-gps",
+      "counts": {
+        "staff": 10,
+        "vehicles": 8,
+        "passengers": 24,
+        "baseRoutes": 16
+      },
+      "assignedStaffIds": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7",
+        "s8"
+      ],
+      "reserveStaffIds": [
+        "s9",
+        "s10"
+      ],
+      "contentSha256": "f32d08ae68d1d5c79660cafaefa3cf76557a928d514076def5e8fea6a0d037e0"
+    }
+  },
+  "collections": {
+    "staff": [
+      {
+        "id": "s1",
+        "name": "김다정",
+        "active": true,
+        "unavailableWeekdays": []
+      },
+      {
+        "id": "s2",
+        "name": "이온유",
+        "active": true,
+        "unavailableWeekdays": []
+      },
+      {
+        "id": "s3",
+        "name": "박여유",
+        "active": true,
+        "unavailableWeekdays": [
+          5
+        ]
+      },
+      {
+        "id": "s4",
+        "name": "최지훈",
+        "active": true,
+        "unavailableWeekdays": []
+      },
+      {
+        "id": "s5",
+        "name": "정서연",
+        "active": true,
+        "unavailableWeekdays": []
+      },
+      {
+        "id": "s6",
+        "name": "강민준",
+        "active": true,
+        "unavailableWeekdays": []
+      },
+      {
+        "id": "s7",
+        "name": "조하은",
+        "active": true,
+        "unavailableWeekdays": []
+      },
+      {
+        "id": "s8",
+        "name": "윤도현",
+        "active": true,
+        "unavailableWeekdays": []
+      },
+      {
+        "id": "s9",
+        "name": "장수빈",
+        "active": true,
+        "unavailableWeekdays": []
+      },
+      {
+        "id": "s10",
+        "name": "임지우",
+        "active": true,
+        "unavailableWeekdays": []
+      }
+    ],
+    "vehicles": [
+      {
+        "id": "v1",
+        "name": "햇살 1호",
+        "passengerCapacity": 4
+      },
+      {
+        "id": "v2",
+        "name": "나무 2호",
+        "passengerCapacity": 4
+      },
+      {
+        "id": "v3",
+        "name": "예비 3호",
+        "passengerCapacity": 4
+      },
+      {
+        "id": "v4",
+        "name": "햇살 4호",
+        "passengerCapacity": 4
+      },
+      {
+        "id": "v5",
+        "name": "햇살 5호",
+        "passengerCapacity": 4
+      },
+      {
+        "id": "v6",
+        "name": "햇살 6호",
+        "passengerCapacity": 4
+      },
+      {
+        "id": "v7",
+        "name": "햇살 7호",
+        "passengerCapacity": 4
+      },
+      {
+        "id": "v8",
+        "name": "햇살 8호",
+        "passengerCapacity": 4
+      }
+    ],
+    "passengers": [
+      {
+        "id": "p1",
+        "name": "김영숙",
+        "address": "가상마을 햇살길 1",
+        "note": "승하차 시 천천히 안내",
+        "fictionalLocation": {
+          "xKm": 2,
+          "yKm": 0
+        }
+      },
+      {
+        "id": "p2",
+        "name": "이정호",
+        "address": "가상마을 햇살길 2",
+        "note": "도착 후 초인종으로 안내",
+        "fictionalLocation": {
+          "xKm": 3,
+          "yKm": 0
+        }
+      },
+      {
+        "id": "p3",
+        "name": "박순자",
+        "address": "가상마을 햇살길 3",
+        "note": "현관 앞에서 탑승",
+        "fictionalLocation": {
+          "xKm": 4,
+          "yKm": 0
+        }
+      },
+      {
+        "id": "p4",
+        "name": "최상철",
+        "address": "가상마을 나무길 1",
+        "note": "승하차 시 천천히 안내",
+        "fictionalLocation": {
+          "xKm": 1.414214,
+          "yKm": 1.414214
+        }
+      },
+      {
+        "id": "p5",
+        "name": "정미경",
+        "address": "가상마을 나무길 2",
+        "note": "정문 앞에서 탑승",
+        "fictionalLocation": {
+          "xKm": 2.12132,
+          "yKm": 2.12132
+        }
+      },
+      {
+        "id": "p6",
+        "address": "햇살연습마을 느티길 2-3",
+        "note": "",
+        "name": "강명수",
+        "fictionalLocation": {
+          "xKm": 2.828427,
+          "yKm": 2.828427
+        }
+      },
+      {
+        "id": "p7",
+        "address": "햇살연습마을 느티길 3-1",
+        "note": "",
+        "name": "조정희",
+        "fictionalLocation": {
+          "xKm": 0,
+          "yKm": 2
+        }
+      },
+      {
+        "id": "p8",
+        "address": "햇살연습마을 느티길 3-2",
+        "note": "",
+        "name": "윤종수",
+        "fictionalLocation": {
+          "xKm": 0,
+          "yKm": 3
+        }
+      },
+      {
+        "id": "p9",
+        "address": "햇살연습마을 느티길 3-3",
+        "note": "",
+        "name": "장영자",
+        "fictionalLocation": {
+          "xKm": 0,
+          "yKm": 4
+        }
+      },
+      {
+        "id": "p10",
+        "address": "햇살연습마을 느티길 4-1",
+        "note": "",
+        "name": "임성호",
+        "fictionalLocation": {
+          "xKm": -1.414214,
+          "yKm": 1.414214
+        }
+      },
+      {
+        "id": "p11",
+        "address": "햇살연습마을 느티길 4-2",
+        "note": "",
+        "name": "한경자",
+        "fictionalLocation": {
+          "xKm": -2.12132,
+          "yKm": 2.12132
+        }
+      },
+      {
+        "id": "p12",
+        "address": "햇살연습마을 느티길 4-3",
+        "note": "",
+        "name": "오광수",
+        "fictionalLocation": {
+          "xKm": -2.828427,
+          "yKm": 2.828427
+        }
+      },
+      {
+        "id": "p13",
+        "address": "햇살연습마을 느티길 5-1",
+        "note": "",
+        "name": "서옥순",
+        "fictionalLocation": {
+          "xKm": -2,
+          "yKm": 0
+        }
+      },
+      {
+        "id": "p14",
+        "address": "햇살연습마을 느티길 5-2",
+        "note": "",
+        "name": "신영수",
+        "fictionalLocation": {
+          "xKm": -3,
+          "yKm": 0
+        }
+      },
+      {
+        "id": "p15",
+        "address": "햇살연습마을 느티길 5-3",
+        "note": "",
+        "name": "권정숙",
+        "fictionalLocation": {
+          "xKm": -4,
+          "yKm": 0
+        }
+      },
+      {
+        "id": "p16",
+        "address": "햇살연습마을 느티길 6-1",
+        "note": "",
+        "name": "황태수",
+        "fictionalLocation": {
+          "xKm": -1.414214,
+          "yKm": -1.414214
+        }
+      },
+      {
+        "id": "p17",
+        "address": "햇살연습마을 느티길 6-2",
+        "note": "",
+        "name": "안미자",
+        "fictionalLocation": {
+          "xKm": -2.12132,
+          "yKm": -2.12132
+        }
+      },
+      {
+        "id": "p18",
+        "address": "햇살연습마을 느티길 6-3",
+        "note": "",
+        "name": "송재호",
+        "fictionalLocation": {
+          "xKm": -2.828427,
+          "yKm": -2.828427
+        }
+      },
+      {
+        "id": "p19",
+        "address": "햇살연습마을 느티길 7-1",
+        "note": "",
+        "name": "류춘자",
+        "fictionalLocation": {
+          "xKm": 0,
+          "yKm": -2
+        }
+      },
+      {
+        "id": "p20",
+        "address": "햇살연습마을 느티길 7-2",
+        "note": "",
+        "name": "홍진수",
+        "fictionalLocation": {
+          "xKm": 0,
+          "yKm": -3
+        }
+      },
+      {
+        "id": "p21",
+        "address": "햇살연습마을 느티길 7-3",
+        "note": "",
+        "name": "문복순",
+        "fictionalLocation": {
+          "xKm": 0,
+          "yKm": -4
+        }
+      },
+      {
+        "id": "p22",
+        "address": "햇살연습마을 느티길 8-1",
+        "note": "",
+        "name": "백동수",
+        "fictionalLocation": {
+          "xKm": 1.414214,
+          "yKm": -1.414214
+        }
+      },
+      {
+        "id": "p23",
+        "address": "햇살연습마을 느티길 8-2",
+        "note": "",
+        "name": "남혜숙",
+        "fictionalLocation": {
+          "xKm": 2.12132,
+          "yKm": -2.12132
+        }
+      },
+      {
+        "id": "p24",
+        "address": "햇살연습마을 느티길 8-3",
+        "note": "",
+        "name": "심만수",
+        "fictionalLocation": {
+          "xKm": 2.828427,
+          "yKm": -2.828427
+        }
+      }
+    ],
+    "baseRoutes": [
+      {
+        "id": "morning-a",
+        "name": "햇살 A코스",
+        "period": "morning",
+        "staffId": "s1",
+        "vehicleId": "v1",
+        "passengerIds": [
+          "p1",
+          "p2",
+          "p3"
+        ]
+      },
+      {
+        "id": "morning-b",
+        "name": "나무 B코스",
+        "period": "morning",
+        "staffId": "s2",
+        "vehicleId": "v2",
+        "passengerIds": [
+          "p4",
+          "p5",
+          "p6"
+        ]
+      },
+      {
+        "id": "afternoon-a",
+        "name": "햇살 A코스",
+        "period": "afternoon",
+        "staffId": "s1",
+        "vehicleId": "v1",
+        "passengerIds": [
+          "p3",
+          "p1",
+          "p2"
+        ]
+      },
+      {
+        "id": "afternoon-b",
+        "name": "나무 B코스",
+        "period": "afternoon",
+        "staffId": "s2",
+        "vehicleId": "v2",
+        "passengerIds": [
+          "p5",
+          "p4",
+          "p6"
+        ]
+      },
+      {
+        "id": "morning-demo-3",
+        "name": "오전 3코스",
+        "period": "morning",
+        "staffId": "s3",
+        "vehicleId": "v3",
+        "passengerIds": [
+          "p7",
+          "p8",
+          "p9"
+        ]
+      },
+      {
+        "id": "morning-demo-4",
+        "name": "오전 4코스",
+        "period": "morning",
+        "staffId": "s4",
+        "vehicleId": "v4",
+        "passengerIds": [
+          "p10",
+          "p11",
+          "p12"
+        ]
+      },
+      {
+        "id": "morning-demo-5",
+        "name": "오전 5코스",
+        "period": "morning",
+        "staffId": "s5",
+        "vehicleId": "v5",
+        "passengerIds": [
+          "p13",
+          "p14",
+          "p15"
+        ]
+      },
+      {
+        "id": "morning-demo-6",
+        "name": "오전 6코스",
+        "period": "morning",
+        "staffId": "s6",
+        "vehicleId": "v6",
+        "passengerIds": [
+          "p16",
+          "p17",
+          "p18"
+        ]
+      },
+      {
+        "id": "morning-demo-7",
+        "name": "오전 7코스",
+        "period": "morning",
+        "staffId": "s7",
+        "vehicleId": "v7",
+        "passengerIds": [
+          "p19",
+          "p20",
+          "p21"
+        ]
+      },
+      {
+        "id": "morning-demo-8",
+        "name": "오전 8코스",
+        "period": "morning",
+        "staffId": "s8",
+        "vehicleId": "v8",
+        "passengerIds": [
+          "p22",
+          "p23",
+          "p24"
+        ]
+      },
+      {
+        "id": "afternoon-demo-3",
+        "name": "오후 3코스",
+        "period": "afternoon",
+        "staffId": "s3",
+        "vehicleId": "v3",
+        "passengerIds": [
+          "p7",
+          "p8",
+          "p9"
+        ]
+      },
+      {
+        "id": "afternoon-demo-4",
+        "name": "오후 4코스",
+        "period": "afternoon",
+        "staffId": "s4",
+        "vehicleId": "v4",
+        "passengerIds": [
+          "p10",
+          "p11",
+          "p12"
+        ]
+      },
+      {
+        "id": "afternoon-demo-5",
+        "name": "오후 5코스",
+        "period": "afternoon",
+        "staffId": "s5",
+        "vehicleId": "v5",
+        "passengerIds": [
+          "p13",
+          "p14",
+          "p15"
+        ]
+      },
+      {
+        "id": "afternoon-demo-6",
+        "name": "오후 6코스",
+        "period": "afternoon",
+        "staffId": "s6",
+        "vehicleId": "v6",
+        "passengerIds": [
+          "p16",
+          "p17",
+          "p18"
+        ]
+      },
+      {
+        "id": "afternoon-demo-7",
+        "name": "오후 7코스",
+        "period": "afternoon",
+        "staffId": "s7",
+        "vehicleId": "v7",
+        "passengerIds": [
+          "p19",
+          "p20",
+          "p21"
+        ]
+      },
+      {
+        "id": "afternoon-demo-8",
+        "name": "오후 8코스",
+        "period": "afternoon",
+        "staffId": "s8",
+        "vehicleId": "v8",
+        "passengerIds": [
+          "p22",
+          "p23",
+          "p24"
+        ]
+      }
+    ]
+  }
+}
