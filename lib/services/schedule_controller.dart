@@ -86,7 +86,106 @@ class ScheduleController extends ChangeNotifier {
   Set<String> get previewReserveStaffIds => _repository is CatalogPreviewScope
       ? (_repository as CatalogPreviewScope).reserveStaffIds
       : const {};
-  bool get busy => saving || absenceSaving;
+  bool passengerDetailsSaving = false;
+  bool get busy => saving || absenceSaving || passengerDetailsSaving;
+  bool get canEditPassengerDetails =>
+      !isCatalogPreview &&
+      (_repository == null || _repository is PassengerDetailsRepository);
+  final Map<String, Set<String>> _appointmentOverrides = {};
+
+  Future<void> savePassengerDetails(
+    String id, {
+    required String note,
+    required int? defaultMorningMinute,
+  }) async {
+    _requireAdmin();
+    if (!canEditPassengerDetails) {
+      throw StateError('이 화면에서는 어르신 기본 정보를 수정할 수 없습니다.');
+    }
+    if (note.length > 2000 ||
+        (defaultMorningMinute != null &&
+            (defaultMorningMinute < 0 || defaultMorningMinute > 1439))) {
+      throw ArgumentError('특이사항과 약속 시간을 확인해 주세요.');
+    }
+    final original = passenger(id);
+    final version = catalog.version;
+    passengerDetailsSaving = true;
+    notifyListeners();
+    try {
+      final saved = _repository is PassengerDetailsRepository
+          ? await (_repository as PassengerDetailsRepository)
+                .savePassengerDetails(
+                  version,
+                  original,
+                  note: note,
+                  defaultMorningMinute: defaultMorningMinute,
+                )
+          : original.withDetails(
+              note: note.trim(),
+              defaultMorningMinute: defaultMorningMinute,
+              detailsVersion: original.detailsVersion + 1,
+            );
+      if (_disposed) return;
+      ScheduleCatalog replace(ScheduleCatalog value) => ScheduleCatalog(
+        version: value.version,
+        staff: value.staff,
+        vehicles: value.vehicles,
+        baseRoutes: value.baseRoutes,
+        passengers: value.passengers.map(
+          (p) => p.id == id
+              ? p.withDetails(
+                  note: saved.note,
+                  defaultMorningMinute: saved.defaultMorningMinute,
+                  detailsVersion: saved.detailsVersion,
+                )
+              : p,
+        ),
+      );
+      catalog = replace(catalog);
+      for (final key in _catalogs.keys.toList()) {
+        if (_catalogs[key]!.version == version) {
+          _catalogs[key] = replace(_catalogs[key]!);
+        }
+      }
+      for (final key in _drafts.keys.toList()) {
+        final current = _drafts[key]!;
+        if (current.period != TransportPeriod.morning ||
+            _confirmed.containsKey(key) ||
+            (_catalogs[key]?.version ?? version) != version ||
+            (_appointmentOverrides[key]?.contains(id) ?? false) ||
+            original.defaultMorningMinute == saved.defaultMorningMinute) {
+          continue;
+        }
+        _drafts[key] = current.copyWith(
+          routes: current.routes.map((r) {
+            if (!r.passengerIds.contains(id)) return r;
+            final value = r.estimatedVisitMinutes[id];
+            if (value != null &&
+                (value != original.defaultMorningMinute ||
+                    r.estimatedVisitSources[id] != 'manual')) {
+              return r;
+            }
+            final times = {...r.estimatedVisitMinutes}..remove(id);
+            final sources = {...r.estimatedVisitSources}..remove(id);
+            if (saved.defaultMorningMinute != null) {
+              times[id] = saved.defaultMorningMinute!;
+              sources[id] = 'manual';
+            }
+            return r.copyWith(
+              estimatedVisitMinutes: times,
+              estimatedVisitSources: sources,
+            );
+          }).toList(),
+        );
+      }
+    } finally {
+      if (!_disposed) {
+        passengerDetailsSaving = false;
+        notifyListeners();
+      }
+    }
+  }
+
   bool isStaffAbsent(String id) =>
       absences[id]?.periods.contains(period) ?? false;
   bool staffAvailable(Staff staff) =>
@@ -497,6 +596,7 @@ class ScheduleController extends ChangeNotifier {
         );
       }
       _dirty.remove(key);
+      _appointmentOverrides.remove(key);
       _removedVisitEstimates.remove(key);
       conflict = false;
     }
@@ -716,6 +816,20 @@ class ScheduleController extends ChangeNotifier {
               staffId: r.staffId,
               vehicleId: r.vehicleId,
               passengerIds: r.passengerIds,
+              estimatedVisitMinutes: period == TransportPeriod.morning
+                  ? {
+                      for (final id in r.passengerIds)
+                        if (passenger(id).defaultMorningMinute != null)
+                          id: passenger(id).defaultMorningMinute!,
+                    }
+                  : const {},
+              estimatedVisitSources: period == TransportPeriod.morning
+                  ? {
+                      for (final id in r.passengerIds)
+                        if (passenger(id).defaultMorningMinute != null)
+                          id: 'manual',
+                    }
+                  : const {},
             ),
         ],
       ),
@@ -894,6 +1008,7 @@ class ScheduleController extends ChangeNotifier {
       throw StateError('현재 코스의 이용자만 시각을 입력할 수 있습니다.');
     }
     final times = {...route.estimatedVisitMinutes}..remove(passengerId);
+    (_appointmentOverrides[_currentKey] ??= {}).add(passengerId);
     final sources = {...route.estimatedVisitSources}..remove(passengerId);
     if (minute != null) times[passengerId] = minute;
     if (minute != null) sources[passengerId] = 'manual';

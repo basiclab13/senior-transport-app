@@ -53,3 +53,68 @@ node_modules/
 *-debug.*.log
 functions/.secret.local
 functions/.env.local
+
+# Local environment and Secret values, in any directory.
+# Examples must contain placeholders only; the exception below is reviewed
+# public configuration (model/bucket names), never a place for API keys.
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+!/functions/.env.senior-transport-app
+.secret
+.secret.*
+.secrets/
+.credentials/
+
+# Admin SDK, OAuth and locally stored authentication credentials.
+*service-account*.json
+*service_account*.json
+*serviceAccount*.json
+*ServiceAccount*.json
+*firebase-adminsdk*.json
+application_default_credentials.json
+credentials.json
+client_secret*.json
+oauth_client*.json
+.git-credentials
+.gitcookies
+.netrc
+_netrc
+.npmrc
+.pypirc
+.aws/
+.gcloud/
+.config/gcloud/
+.ssh/
+
+# Private keys and mobile signing credentials (not public Firebase config).
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+key.properties
+
+# Firebase local caches and exported account/data snapshots.
+# Ignore rules do not untrack existing files or remove historical objects.
+.firebase/
+auth_export/
+firestore_export/
+storage_export/
+firebase-export-metadata.json
+
+# Browser profiles can retain login tokens even after a debugging session.
+chrome-profile*/
+chrome-device*/
+chromium-profile*/
+browser-profile*/
+
+# Flutter-generated local files. Keep normal generated plugin source files.
+.flutter-plugins
+**/flutter/ephemeral/
+**/Flutter/ephemeral/
+**/Flutter/Generated.xcconfig
+**/Flutter/flutter_export_environment.sh

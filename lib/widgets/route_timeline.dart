@@ -40,7 +40,7 @@ class RouteTimeline extends StatelessWidget {
   Widget _stop(BuildContext context, String id, int index) {
     final passenger = controller.passenger(id);
     final time = visitTimeText(controller.period, route, id);
-    if (collapseNotes && passenger.note.isEmpty) {
+    if (collapseNotes) {
       return ListTile(
         key: ValueKey('timeline-$id'),
         leading: CircleAvatar(radius: 16, child: Text('${index + 1}')),
@@ -57,6 +57,14 @@ class RouteTimeline extends StatelessWidget {
                 ),
               ),
             Text(passenger.address),
+            if (passenger.note.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  passenger.note,
+                  style: const TextStyle(height: 1.5),
+                ),
+              ),
           ],
         ),
       );
@@ -131,10 +139,14 @@ class RouteTimeline extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   Text(passenger.address),
-                  Text(
-                    passenger.note,
-                    style: const TextStyle(color: Colors.black54),
-                  ),
+                  if (passenger.note.trim().isNotEmpty)
+                    Text(
+                      passenger.note,
+                      style: const TextStyle(
+                        color: Colors.black54,
+                        height: 1.5,
+                      ),
+                    ),
                   if (actionsBuilder != null) actionsBuilder!(id, index),
                 ],
               ),

@@ -82,12 +82,12 @@ service cloud.firestore {
         request.resource.data.date is string && request.resource.data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
         request.resource.data.period in ['morning', 'afternoon'] &&
         request.resource.data.routeId is string && request.resource.data.routeId.matches('^[A-Za-z0-9_-]{1,80}$') &&
-        request.resource.data.kind in ['start', 'end'] &&
+        ((request.resource.data.period == 'morning' && request.resource.data.kind == 'start') ||
+          (request.resource.data.period == 'afternoon' && request.resource.data.kind == 'end')) &&
         recordId == request.resource.data.date + '_' + request.resource.data.period + '_' + request.resource.data.routeId + '_' + request.resource.data.kind &&
         request.resource.data.registeredAt == request.time && request.resource.data.contentType == 'image/jpeg' &&
         request.resource.data.photo is bytes && request.resource.data.photo.size() > 0 && request.resource.data.photo.size() <= 184320 &&
-        assigned(request.resource.data) &&
-        (request.resource.data.kind == 'start' || exists(/databases/$(database)/documents/attendance/$(staffId)/records/$(request.resource.data.date + '_' + request.resource.data.period + '_' + request.resource.data.routeId + '_start')));
+        assigned(request.resource.data);
       allow update, delete: if false;
     }
     match /{document=**} { allow read, write: if false; }

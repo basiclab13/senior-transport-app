@@ -169,9 +169,14 @@ test('today photo start/end with existing staff UID; old records kept and owner/
   const bucket=getStorage(app).bucket(`${db.projectId}.firebasestorage.app`),photoBase64=(await sharp({create:{width:16,height:16,channels:3,background:'white'}}).jpeg().toBuffer()).toString('base64');
   const photo={date:today,period:'morning',routeId:'morning-a',kind:'start',requestId:randomUUID(),photoBase64,expectedVersion:1,expectedAvailabilityVersion:0};
   await assert.rejects(registerWorkPhoto(db,bucket,'other',photo),{code:'failed-precondition'});
-  const start=await registerWorkPhoto(db,bucket,'staff',photo);await registerWorkPhoto(db,bucket,'staff',{...photo,kind:'end',requestId:randomUUID()});
+  const start=await registerWorkPhoto(db,bucket,'staff',photo);
+  const pm=request('afternoon',today);
+  if(new Date(`${today}T00:00:00Z`).getUTCDay()===5)pm.routes.find(r=>r.staffId==='s3').staffId='s9';
+  await confirm(db,'admin',pm);
+  await registerWorkPhoto(db,bucket,'staff',{...photo,period:'afternoon',routeId:'afternoon-a',kind:'end',requestId:randomUUID()});
   const query={staffId:'s1',date:today,period:'morning'};
-  assert.equal((await getWorkPhotos(db,bucket,'admin',query)).records.length,2);
+  assert.equal((await getWorkPhotos(db,bucket,'admin',query)).records.length,1);
+  assert.equal((await getWorkPhotos(db,bucket,'admin',{...query,period:'afternoon'})).records[0].kind,'end');
   assert.ok((await getWorkPhotos(db,bucket,'staff',{...query,recordId:start.recordId})).photoBase64);
   await assert.rejects(getWorkPhotos(db,bucket,'other',query),{code:'permission-denied'});
   const [host,port]=process.env.FIRESTORE_EMULATOR_HOST.split(':');
@@ -182,7 +187,7 @@ test('today photo start/end with existing staff UID; old records kept and owner/
     await assertFails(getDoc(doc(rules.authenticatedContext('other').firestore(),`workPhotoRecords/s1/records/${start.recordId}`)));
   }finally{await rules.cleanup();}
   await transition(db,manifest,options(db,{rollback:true,approval:PREVIOUS}));
-  assert.equal((await getWorkPhotos(db,bucket,'staff',query)).records.length,2);
+  assert.equal((await getWorkPhotos(db,bucket,'staff',query)).records.length,1);
   assert.ok((await getWorkPhotos(db,bucket,'admin',{...query,recordId:start.recordId})).photoBase64);
   assert.deepEqual((await db.doc('attendance/s1/records/old').get()).data(),{keep:true});
 }));

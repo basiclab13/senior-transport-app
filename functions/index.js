@@ -5,6 +5,10 @@ const { onCall } = require('firebase-functions/v2/https');
 const { confirm } = require('./schedule-service');
 const { setStaffAbsence } = require('./staff-absence-service');
 initializeApp();
+for (const name of ['getPassengerDetails','updatePassengerDetails']) {
+  exports[name] = onCall({region:'asia-northeast3',maxInstances:2},
+    request => require('./passenger-details')[name](getFirestore(),request.auth?.uid,request.data));
+}
 exports.registerWorkPhoto = require('./work-photos').registerWorkPhoto;
 exports.getWorkPhotos = require('./work-photos').getWorkPhotos;
 exports.confirmSchedule = onCall({ region: 'asia-northeast3', maxInstances: 2 },

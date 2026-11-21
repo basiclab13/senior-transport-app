@@ -47,7 +47,7 @@ test('private Storage work photos: real JPEG, confirmed assignment, atomic compl
       await rejects(registerWorkPhoto(db,bucket,null,input(),options),'unauthenticated');
       await rejects(registerWorkPhoto(db,bucket,'staff',input({staffId:'s2'}),options),'invalid-argument');
       await rejects(registerWorkPhoto(db,bucket,'staff',input({date:'2026-11-15'}),options),'failed-precondition');
-      await rejects(registerWorkPhoto(db,bucket,'staff',input({period:'afternoon'}),options),'failed-precondition');
+      await rejects(registerWorkPhoto(db,bucket,'staff',input({period:'afternoon',kind:'end'}),options),'failed-precondition');
       await rejects(registerWorkPhoto(db,bucket,'staff',input({expectedVersion:2}),options),'failed-precondition');
       await db.doc('_workPhotoControl/config').update({requireAppCheck:true});
       await rejects(registerWorkPhoto(db,bucket,'staff',input(),options),'unauthenticated');
@@ -55,7 +55,7 @@ test('private Storage work photos: real JPEG, confirmed assignment, atomic compl
     });
     await t.test('server rejects fake JPEG, PNG, excessive bytes/pixels and end-before-start',async()=>{
       for(const bytes of [Buffer.from('not JPEG'),Buffer.alloc(MAX_BYTES+1),await sharp(image).png().toBuffer(),await sharp({create:{width:2500,height:2000,channels:3,background:'white'}}).jpeg().toBuffer()])await rejects(jpeg(bytes.toString('base64')),'invalid-argument');
-      await rejects(registerWorkPhoto(db,bucket,'staff',input({kind:'end'}),options),'failed-precondition');
+      await rejects(registerWorkPhoto(db,bucket,'staff',input({kind:'end'}),options),'invalid-argument');
       const withExif=await sharp(image).withExif({IFD0:{Artist:'Fictional fixture'}}).jpeg().toBuffer();
       assert.ok((await sharp(withExif).metadata()).exif);
       assert.equal((await sharp(await jpeg(withExif.toString('base64'))).metadata()).exif,undefined);
@@ -115,12 +115,25 @@ test('private Storage work photos: real JPEG, confirmed assignment, atomic compl
         await assertFails(setDoc(directRecord,{bypass:true}));
       }
     });
-    await t.test('concurrent starts cannot overwrite; end stores only after start; retry returns first record',async()=>{
-      const end=input({kind:'end'});
-      const results=await Promise.allSettled([registerWorkPhoto(db,bucket,'staff',end,options),registerWorkPhoto(db,bucket,'staff',input({kind:'end'}),options)]);
+    await t.test('afternoon end is independent of morning records; concurrent requests cannot overwrite',async()=>{
+      await confirm(db,'admin',operationRequest(catalog,date,'afternoon',catalogVersion,randomUUID()));
+      const afternoonRoute=catalog.baseRoutes.find(r=>r.staffId==='s1'&&r.period==='afternoon').id;
+      const end=input({period:'afternoon',routeId:afternoonRoute,kind:'end'});
+      const results=await Promise.allSettled([registerWorkPhoto(db,bucket,'staff',end,options),registerWorkPhoto(db,bucket,'staff',{...end,requestId:randomUUID()},options)]);
       assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
-      const records=(await read()).records;assert.equal(records.length,2);
+      const records=(await getWorkPhotos(db,bucket,'staff',{staffId:'s1',date,period:'afternoon'},options)).records;assert.equal(records.length,1);assert.equal(records[0].kind,'end');
       assert.deepEqual((await read('s1',{recordId:start.recordId})).registeredAt,start.registeredAt);
+    });
+    await t.test('missing morning start does not block afternoon end; wrong period kind is rejected',async()=>{
+      const previous=now,day='2026-11-20';now=Date.parse(`${day}T08:00:00Z`);
+      try {
+        await confirm(db,'admin',operationRequest(catalog,day,'afternoon',catalogVersion,randomUUID()));
+        const afternoonRoute=catalog.baseRoutes.find(r=>r.staffId==='s1'&&r.period==='afternoon').id;
+        const request=input({date:day,period:'afternoon',routeId:afternoonRoute,kind:'end'});
+        await rejects(registerWorkPhoto(db,bucket,'staff',{...request,kind:'start'},options),'invalid-argument');
+        assert.equal((await registerWorkPhoto(db,bucket,'staff',request,options)).kind,'end');
+        assert.equal((await getWorkPhotos(db,bucket,'staff',{staffId:'s1',date:day,period:'morning'},options)).records.length,0);
+      } finally {now=previous;}
     });
     await t.test('in-flight reassignment or revocation cannot complete an uploaded photo',async()=>{
       const next='2026-11-17';now=Date.parse(`${next}T03:00:00Z`);
@@ -150,7 +163,7 @@ test('private Storage work photos: real JPEG, confirmed assignment, atomic compl
       now+=31*86400000;
       assert.equal((await read()).records.length,0);
       await rejects(read('s1',{recordId:start.recordId}),'not-found');
-      assert.equal((await cleanupWorkPhotos(db,bucket,{clock,apply:true})).expired,2);
+      assert.equal((await cleanupWorkPhotos(db,bucket,{clock,apply:true})).expired,3);
       assert.equal((await bucket.getFiles({prefix:'workPhotos/v1/'}))[0].length,0);
     });
     for(const [path,data]of before)assert.deepEqual((await db.doc(path).get()).data(),data);
@@ -191,7 +204,7 @@ test('new Callable HTTP entry points use Auth, Firestore and private Storage Emu
     };
     const photo=await sharp({create:{width:16,height:16,channels:3,background:'white'}}).jpeg().toBuffer();
     const request={date:clockDate,period:'afternoon',routeId:route.baseRouteId,
-      kind:'start',requestId:randomUUID(),photoBase64:photo.toString('base64'),expectedVersion:schedule.version,expectedAvailabilityVersion:availabilityVersion};
+      kind:'end',requestId:randomUUID(),photoBase64:photo.toString('base64'),expectedVersion:schedule.version,expectedAvailabilityVersion:availabilityVersion};
     assert.equal((await invoke('registerWorkPhoto',request,null)).status,401);
     const saved=await invoke('registerWorkPhoto',request);assert.equal(saved.status,200);
     const result=await invoke('getWorkPhotos',{staffId:route.staffId,date:clockDate,period:'afternoon',recordId:saved.body.result.recordId});

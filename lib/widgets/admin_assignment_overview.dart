@@ -34,6 +34,15 @@ class _AdminAssignmentOverviewState extends State<AdminAssignmentOverview> {
   ScheduleController get c => widget.controller;
   bool _matches(String name) =>
       name.toLowerCase().contains(displayName(_query.trim()).toLowerCase());
+  String _visits(RouteAssignment route) => [
+    for (var i = 0; i < route.passengerIds.length; i++)
+      '${i + 1}. ${displayName(c.passenger(route.passengerIds[i]).name)}${c.period == TransportPeriod.morning && route.isManualEstimate(route.passengerIds[i]) ? ' · 약속 ${minuteLabel(route.estimatedVisitMinutes[route.passengerIds[i]])}' : ''}',
+    if (c
+        .baseRoute(route.baseRouteId)
+        .passengerIds
+        .any(c.draft.absentIds.contains))
+      '결석: ${c.baseRoute(route.baseRouteId).passengerIds.where(c.draft.absentIds.contains).map((id) => displayName(c.passenger(id).name)).join(', ')}',
+  ].join('\n');
 
   void _open(RouteAssignment route, [String? passengerId]) => Navigator.pop(
     context,
@@ -142,6 +151,29 @@ class _AdminAssignmentOverviewState extends State<AdminAssignmentOverview> {
                   ),
                 ),
               ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: SegmentedButton<TransportPeriod>(
+                  segments: [
+                    for (final p in TransportPeriod.values)
+                      ButtonSegment(value: p, label: Text(p.label)),
+                  ],
+                  selected: {c.period},
+                  onSelectionChanged: c.busy
+                      ? null
+                      : (values) => c.selectPeriod(values.single),
+                ),
+              ),
+              if (missing.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    '미배정: ${missing.map((id) => displayName(c.passenger(id).name)).join(', ')}',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
@@ -281,14 +313,8 @@ class _AdminAssignmentOverviewState extends State<AdminAssignmentOverview> {
                                 SizedBox(width: 90, child: _capacity(r)),
                                 Expanded(
                                   child: Text(
-                                    r.passengerIds
-                                        .map(
-                                          (id) =>
-                                              displayName(c.passenger(id).name),
-                                        )
-                                        .join(' → '),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
+                                    _visits(r),
+                                    style: const TextStyle(height: 1.5),
                                   ),
                                 ),
                                 const Icon(Icons.chevron_right, size: 18),
@@ -303,14 +329,8 @@ class _AdminAssignmentOverviewState extends State<AdminAssignmentOverview> {
                                 ),
                                 _capacity(r),
                                 Text(
-                                  r.passengerIds
-                                      .map(
-                                        (id) =>
-                                            displayName(c.passenger(id).name),
-                                      )
-                                      .join(' → '),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
+                                  _visits(r),
+                                  style: const TextStyle(height: 1.5),
                                 ),
                               ],
                             ),

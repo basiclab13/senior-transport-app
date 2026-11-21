@@ -57,6 +57,8 @@ class ScheduleCatalog {
           p['name'] as String,
           p['address'] as String,
           p['note'] as String,
+          defaultMorningMinute: p['defaultMorningMinute'] as int?,
+          detailsVersion: p['detailsVersion'] as int? ?? 0,
         ),
       ),
       baseRoutes: entries('baseRoutes').map(

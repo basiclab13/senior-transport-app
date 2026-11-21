@@ -86,6 +86,9 @@ void main() {
     final source = fixtureController(user: adminUser);
     source.confirm();
     repo.snapshots['2026-11-12_morning'] = source.confirmed!;
+    source.selectPeriod(TransportPeriod.afternoon);
+    source.confirm();
+    repo.snapshots['2026-11-12_afternoon'] = source.confirmed!;
     source.dispose();
     c = ScheduleController.remote(
       user: staffUser,
@@ -111,7 +114,7 @@ void main() {
           staffId: 's1',
           staffName: '김다정',
           date: DateTime(2026, 11, 12),
-          period: TransportPeriod.morning,
+          period: c.period,
           routeId: routeId,
           photoPicker: picker ?? () async => demoPhoto,
         ),
@@ -131,17 +134,16 @@ void main() {
 
   testWidgets('사진 확인 후 시작·종료를 기록하며 한국 시간과 사진을 다시 조회한다', (tester) async {
     await open(tester);
-    expect(tester.widget<FilledButton>(button('end')).onPressed, isNull);
+    expect(button('end'), findsNothing);
     await register(tester, 'start');
     expect(repo.attendance.records.single.kind, WorkPhotoKind.start);
     expect(find.textContaining('2026-11-12 09:15:00'), findsOneWidget);
     expect(tester.widget<FilledButton>(button('start')).onPressed, isNull);
-    await register(tester, 'end');
-    expect(repo.attendance.records.length, 2);
+    expect(button('end'), findsNothing);
     await tester.pumpWidget(const SizedBox());
     await open(tester);
-    expect(find.byType(Image), findsNWidgets(2));
-    expect(find.textContaining('2026-11-12 09:15:00'), findsNWidgets(2));
+    expect(find.byType(Image), findsOneWidget);
+    expect(find.textContaining('2026-11-12 09:15:00'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
   testWidgets('카메라와 사진 선택을 구분하며 선택 메뉴 취소는 저장하지 않는다', (tester) async {
@@ -205,7 +207,7 @@ void main() {
   testWidgets('담당 코스가 없으면 이전 사진 조회만 가능하며 업로드는 차단한다', (tester) async {
     await open(tester, routeId: null);
     expect(tester.widget<FilledButton>(button('start')).onPressed, isNull);
-    expect(tester.widget<FilledButton>(button('end')).onPressed, isNull);
+    expect(button('end'), findsNothing);
   });
   testWidgets('관리자 직원 상세에서 기록을 열고 조회만 할 수 있다', (tester) async {
     await repo.attendance.register(
@@ -254,8 +256,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await open(tester);
     await register(tester, 'start');
-    await register(tester, 'end');
-    expect(repo.attendance.records.length, 2);
+    expect(button('end'), findsNothing);
+    expect(repo.attendance.records.length, 1);
     expect(tester.takeException(), isNull);
   });
   testWidgets('Emulator가 아닌 환경에서는 등록하지 않는다', (tester) async {
@@ -263,5 +265,19 @@ void main() {
     await open(tester);
     expect(find.text('사진 등록을 사용할 수 없습니다. 관리자에게 문의해 주세요.'), findsOneWidget);
     expect(button('start'), findsNothing);
+  });
+  testWidgets('오전 시작 누락과 관계없이 오후에는 종료 사진만 등록한다', (tester) async {
+    c.selectPeriod(TransportPeriod.afternoon);
+    await tester.pumpWidget(const SizedBox());
+    await open(tester, routeId: 'afternoon-a');
+    expect(button('start'), findsNothing);
+    expect(button('end'), findsOneWidget);
+    await register(tester, 'end');
+    expect(repo.attendance.records.single.kind, WorkPhotoKind.end);
+    expect(repo.attendance.records.single.period, TransportPeriod.afternoon);
+    expect(
+      repo.attendance.records.where((r) => r.period == TransportPeriod.morning),
+      isEmpty,
+    );
   });
 }

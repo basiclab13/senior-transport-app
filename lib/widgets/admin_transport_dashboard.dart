@@ -31,6 +31,15 @@ class _AdminTransportDashboardState extends State<AdminTransportDashboard> {
   ScheduleController get c => widget.controller;
   bool matches(String value) =>
       value.toLowerCase().contains(displayName(query.trim()).toLowerCase());
+  String _visits(RouteAssignment route) => [
+    for (var i = 0; i < route.passengerIds.length; i++)
+      '${i + 1}. ${displayName(c.passenger(route.passengerIds[i]).name)}${c.period == TransportPeriod.morning && route.isManualEstimate(route.passengerIds[i]) ? ' · ${minuteLabel(route.estimatedVisitMinutes[route.passengerIds[i]])}' : ''}',
+    if (c
+        .baseRoute(route.baseRouteId)
+        .passengerIds
+        .any(c.draft.absentIds.contains))
+      '결석: ${c.baseRoute(route.baseRouteId).passengerIds.where(c.draft.absentIds.contains).map((id) => displayName(c.passenger(id).name)).join(', ')}',
+  ].join('\n');
   int priority(String error) => error.contains('결근')
       ? 0
       : error.contains('누락') || error.contains('배정') || error.contains('정원')
@@ -240,7 +249,7 @@ class _AdminTransportDashboardState extends State<AdminTransportDashboard> {
                         '이용자 0명 · $status'
                       else
                         for (final r in routes)
-                          '${displayName(c.baseRoute(r.baseRouteId).name)} · ${displayName(c.vehicle(r.vehicleId).name)}\n이용자 ${r.passengerIds.length}/${c.vehicle(r.vehicleId).passengerCapacity}명 · $status',
+                          '${displayName(c.baseRoute(r.baseRouteId).name)} · ${displayName(c.vehicle(r.vehicleId).name)}\n이용자 ${r.passengerIds.length}/${c.vehicle(r.vehicleId).passengerCapacity}명 · $status\n${_visits(r)}',
                       if (passenger != null)
                         '${displayName(passenger.name)} · ${assigned.contains(passenger.id)
                             ? '담당 이용자'
@@ -340,6 +349,7 @@ class _AdminTransportDashboardState extends State<AdminTransportDashboard> {
       1: FlexColumnWidth(3),
       2: FlexColumnWidth(1.4),
       3: FlexColumnWidth(2.6),
+      4: FlexColumnWidth(4),
     },
     defaultVerticalAlignment: TableCellVerticalAlignment.middle,
     border: TableBorder(
@@ -351,7 +361,13 @@ class _AdminTransportDashboardState extends State<AdminTransportDashboard> {
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
         ),
         children: [
-          for (final title in ['직원 이름', '담당 코스 · 차량', '이용자 수', '배정 상태'])
+          for (final title in [
+            '직원 이름',
+            '담당 코스 · 차량',
+            '이용자 수',
+            '배정 상태',
+            '방문 순서 · 오전 약속 시간',
+          ])
             Padding(
               padding: const EdgeInsets.all(12),
               child: Text(
@@ -434,6 +450,7 @@ class _AdminTransportDashboardState extends State<AdminTransportDashboard> {
           const Icon(Icons.chevron_right, size: 18),
         ],
       ),
+      Text(routes.map(_visits).join('\n'), style: const TextStyle(height: 1.5)),
     ];
     return TableRow(
       children: [

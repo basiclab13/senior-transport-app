@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/passenger_details_dialog.dart';
+
 import '../utils/schedule_wording.dart';
 import '../utils/display_wording.dart';
 
@@ -533,12 +535,19 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 spacing: 4,
                 children: [
+                  if (c.canEditPassengerDetails)
+                    TextButton.icon(
+                      key: ValueKey('passenger-details-$id'),
+                      onPressed: () => _editPassengerDetails(id),
+                      icon: const Icon(Icons.person_outline, size: 18),
+                      label: const Text('기본 시간·특이사항'),
+                    ),
                   if (c.period == TransportPeriod.morning)
                     TextButton.icon(
                       key: ValueKey('time-$id'),
                       onPressed: () => _editTime(route, passengerId: id),
                       icon: const Icon(Icons.schedule, size: 18),
-                      label: const Text('약속 시간 입력'),
+                      label: const Text('이 날짜 시간 변경'),
                     ),
                   IconButton(
                     key: ValueKey('up-$id'),
@@ -692,7 +701,8 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
       useRootNavigator: false,
       builder: (_) => EstimatedTimeDialog(
         title: '${displayName(c.passenger(passengerId).name)} 약속 시간',
-        labels: const ['약속 시간(선택)'],
+        defaultMinute: c.passenger(passengerId).defaultMorningMinute,
+        labels: const ['이 날짜의 약속 시간(선택)'],
         guidance: minute != null && !manual
             ? '이전 기록 ${minuteLabel(minute)}은 약속 여부를 확인해야 합니다. 약속한 시간을 직접 입력해 주세요.'
             : '약속한 시간을 입력하세요. 비우고 저장하면 약속 시간이 지워집니다.',
@@ -713,6 +723,45 @@ class _AdminScheduleViewState extends State<AdminScheduleView> {
     // A blank legacy/reference field is not an instruction to erase that record.
     if (!manual && result[0] == null) return;
     c.setVisitMinute(route.baseRouteId, passengerId, result[0]);
+  }
+
+  Future<void> _editPassengerDetails(String id) async {
+    final original = c.passenger(id);
+    final version = c.catalog.version;
+    final result = await showDialog<({String note, int? minute})>(
+      context: context,
+      useRootNavigator: false,
+      builder: (_) => PassengerDetailsDialog(passenger: original),
+    );
+    if (result == null ||
+        !mounted ||
+        c.catalog.version != version ||
+        !identical(c.passenger(id), original) ||
+        c.busy ||
+        c.loading) {
+      return;
+    }
+    try {
+      await c.savePassengerDetails(
+        id,
+        note: result.note,
+        defaultMorningMinute: result.minute,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('기본 정보를 저장했습니다.')));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '기본 정보를 저장하지 못했습니다. 다른 관리자의 변경이나 연결 상태를 확인하고 다시 불러와 주세요.',
+            ),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _editAbsence(String staffId) async {
