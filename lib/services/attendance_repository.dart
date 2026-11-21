@@ -100,6 +100,12 @@ class FirebaseAttendanceRepository implements AttendanceRepository {
     if (user.role != UserRole.staff || user.staffId == null) {
       throw StateError('직원 본인의 사진만 등록할 수 있습니다.');
     }
+    if (kind !=
+        (period == TransportPeriod.morning
+            ? WorkPhotoKind.start
+            : WorkPhotoKind.end)) {
+      throw StateError('오전에는 업무 시작, 오후에는 업무 종료 사진을 등록해 주세요.');
+    }
     if (photo.isEmpty || photo.length > AttendanceRecord.maxPhotoBytes) {
       throw StateError('사진 크기를 줄이거나 다른 시연용 사진을 선택해 주세요.');
     }

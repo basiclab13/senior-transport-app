@@ -31,11 +31,33 @@ class Staff {
 }
 
 class Passenger {
-  const Passenger(this.id, this.name, this.address, this.note);
+  const Passenger(
+    this.id,
+    this.name,
+    this.address,
+    this.note, {
+    this.defaultMorningMinute,
+    this.detailsVersion = 0,
+  });
   final String id;
   final String name;
   final String address;
   final String note;
+  final int? defaultMorningMinute;
+  final int detailsVersion;
+
+  Passenger withDetails({
+    required String note,
+    required int? defaultMorningMinute,
+    required int detailsVersion,
+  }) => Passenger(
+    id,
+    name,
+    address,
+    note,
+    defaultMorningMinute: defaultMorningMinute,
+    detailsVersion: detailsVersion,
+  );
 }
 
 class Vehicle {

@@ -47,7 +47,7 @@ function verify() {
   assert.ok(config.functions.ignore.includes('.env.local'));
   const manifest = inspectEntry();
   const names = Object.keys(manifest.endpoints).sort();
-  assert.deepEqual(names, ['confirmSchedule', 'getWorkPhotos', 'registerWorkPhoto', 'setStaffAbsence', 'suggestSchedule']);
+  assert.deepEqual(names, ['confirmSchedule', 'getPassengerDetails', 'getWorkPhotos', 'registerWorkPhoto', 'setStaffAbsence', 'suggestSchedule', 'updatePassengerDetails']);
   assert.deepEqual(manifest.params.map(p=>[p.name,p.type]).sort(), [['GEMINI_API_KEY','secret'],['GEMINI_MODEL','string'],['WORK_PHOTO_BUCKET','string']]);
   for(const name of ['registerWorkPhoto','getWorkPhotos']) {
     const endpoint=manifest.endpoints[name];
@@ -56,7 +56,7 @@ function verify() {
     assert.equal((endpoint.secretEnvironmentVariables||[]).length,0);
     assert.equal(endpoint.serviceAccountEmail,'work-photos@senior-transport-app.iam.gserviceaccount.com');
   }
-  for (const name of ['confirmSchedule','setStaffAbsence']) {
+  for (const name of ['confirmSchedule','setStaffAbsence','getPassengerDetails','updatePassengerDetails']) {
     const endpoint=manifest.endpoints[name];
     assert.equal(endpoint.platform, 'gcfv2');
     assert.deepEqual(endpoint.region, ['asia-northeast3']);

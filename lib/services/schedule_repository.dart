@@ -70,11 +70,21 @@ abstract class ScheduleSuggestionRepository {
   Future<Map<String, dynamic>> suggestSchedule(Map<String, dynamic> request);
 }
 
+abstract class PassengerDetailsRepository {
+  Future<Passenger> savePassengerDetails(
+    String catalogVersion,
+    Passenger passenger, {
+    required String note,
+    required int? defaultMorningMinute,
+  });
+}
+
 class FirebaseScheduleRepository
     implements
         ScheduleRepository,
         StaffAvailabilityRepository,
         ScheduleSuggestionRepository,
+        PassengerDetailsRepository,
         AttendanceProvider {
   @override
   late final AttendanceRepository attendance =
@@ -103,6 +113,29 @@ class FirebaseScheduleRepository
   final FirebaseFirestore firestore;
   final FirebaseFunctions functions;
   static const _server = GetOptions(source: Source.server);
+
+  @override
+  Future<Passenger> savePassengerDetails(
+    String catalogVersion,
+    Passenger passenger, {
+    required String note,
+    required int? defaultMorningMinute,
+  }) async {
+    final result = await functions
+        .httpsCallable('updatePassengerDetails')
+        .call<Map<String, dynamic>>({
+          'catalogVersion': catalogVersion,
+          'passengerId': passenger.id,
+          'expectedVersion': passenger.detailsVersion,
+          'note': note,
+          'defaultMorningMinute': defaultMorningMinute,
+        });
+    return passenger.withDetails(
+      note: result.data['note'] as String,
+      defaultMorningMinute: result.data['defaultMorningMinute'] as int?,
+      detailsVersion: result.data['detailsVersion'] as int,
+    );
+  }
 
   @override
   bool get allowsAiSuggestions =>
@@ -250,7 +283,7 @@ class FirebaseScheduleRepository
     if (!RegExp(r'^[A-Za-z0-9_-]{1,80}$').hasMatch(version)) {
       throw const FormatException('기본 데이터 등록이 필요합니다.');
     }
-    final ScheduleCatalog catalog;
+    ScheduleCatalog catalog;
     if (user.role == UserRole.staff && data != null) {
       if (data['staffId'] != user.staffId) {
         throw const FormatException('직원 연결 정보가 일치하지 않습니다.');
@@ -303,6 +336,35 @@ class FirebaseScheduleRepository
             (user.role == UserRole.staff &&
                 snapshot.routes.any((r) => r.staffId != user.staffId)))) {
       throw const FormatException('일정 조회 범위가 일치하지 않습니다.');
+    }
+    if (user.role == UserRole.admin || snapshot != null) {
+      final result = await functions
+          .httpsCallable('getPassengerDetails')
+          .call<Map<String, dynamic>>({
+            'catalogVersion': version,
+            'date': dateKey(date),
+            'period': period.name,
+          });
+      final details = {
+        for (final raw in result.data['passengers'] as List)
+          (raw as Map)['id'] as String: raw,
+      };
+      catalog = ScheduleCatalog(
+        version: catalog.version,
+        staff: catalog.staff,
+        vehicles: catalog.vehicles,
+        baseRoutes: catalog.baseRoutes,
+        passengers: catalog.passengers.map((p) {
+          final d = details[p.id];
+          return d == null
+              ? p
+              : p.withDetails(
+                  note: d['note'] as String,
+                  defaultMorningMinute: d['defaultMorningMinute'] as int?,
+                  detailsVersion: d['detailsVersion'] as int,
+                );
+        }),
+      );
     }
     return ScheduleViewData(
       emulatorDisplayCatalog(

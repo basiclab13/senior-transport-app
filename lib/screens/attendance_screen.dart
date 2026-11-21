@@ -66,6 +66,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       c.staffRoutes.any((r) => r.baseRouteId == widget.routeId);
 
   Future<void> register(WorkPhotoKind kind) async {
+    if (kind !=
+        (widget.period == TransportPeriod.morning
+            ? WorkPhotoKind.start
+            : WorkPhotoKind.end)) {
+      return;
+    }
     final snapshot = c.confirmed;
     final revision = c.absenceRevisionKey;
     setState(() {
@@ -168,7 +174,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   'aborted' => '등록 처리 중이거나 일정이 변경되었습니다. 잠시 후 기록을 새로고침해 주세요.',
                   'permission-denied' =>
                     '본인의 확정 일정만 등록할 수 있습니다. 담당 일정을 확인해 주세요.',
-                  'failed-precondition' => '사진 설정, 오늘의 확정 일정과 결근 여부를 확인해 주세요. 종료 사진은 시작 사진부터 등록해야 합니다.',
+                  'failed-precondition' => '사진 설정, 오늘의 확정 일정과 결근 여부를 확인해 주세요.',
                   'invalid-argument' => '작은 JPEG 사진을 다시 선택해 주세요.',
                   _ => '등록 완료 여부를 확인하지 못했습니다. 연결을 확인하고 기록을 새로고침한 뒤 다시 시도해 주세요.',
                 }
@@ -226,11 +232,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     builder: (context, snapshot) {
                       final entries = snapshot.data ?? [];
                       final verified = snapshot.hasData && !snapshot.hasError;
-                      final started = entries.any(
-                        (r) =>
-                            r.kind == WorkPhotoKind.start &&
-                            r.routeId == widget.routeId,
-                      );
+                      final expectedKind =
+                          widget.period == TransportPeriod.morning
+                          ? WorkPhotoKind.start
+                          : WorkPhotoKind.end;
                       return Center(
                         child: ConstrainedBox(
                           constraints: const BoxConstraints(maxWidth: 720),
@@ -258,7 +263,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                 const Text(
                                   '현재 본인에게 확정된 운행 가능한 코스에서만 사진을 등록할 수 있습니다.',
                                 ),
-                              for (final kind in WorkPhotoKind.values)
+                              for (final kind in WorkPhotoKind.values.where(
+                                (kind) =>
+                                    kind == expectedKind ||
+                                    entries.any((r) => r.kind == kind),
+                              ))
                                 Card(
                                   child: Padding(
                                     padding: const EdgeInsets.all(16),
@@ -288,7 +297,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                         ],
                                         if (!entries.any((r) => r.kind == kind))
                                           const Text('아직 등록된 사진이 없습니다.'),
-                                        if (staff)
+                                        if (staff && kind == expectedKind)
                                           FilledButton.icon(
                                             key: Key(
                                               'register-work-${kind.name}',
@@ -302,11 +311,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                                           r.kind == kind &&
                                                           r.routeId ==
                                                               widget.routeId,
-                                                    ) &&
-                                                    (kind ==
-                                                            WorkPhotoKind
-                                                                .start ||
-                                                        started)
+                                                    )
                                                 ? () => register(kind)
                                                 : null,
                                             icon: busy == kind && uploading
@@ -323,10 +328,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                                                   ),
                                             label: Text('${kind.label} 사진 등록'),
                                           ),
-                                        if (staff &&
-                                            kind == WorkPhotoKind.end &&
-                                            !started)
-                                          const Text('업무 시작 사진을 먼저 등록해 주세요.'),
                                       ],
                                     ),
                                   ),
@@ -357,9 +358,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           final current = entries
               .where((r) => r.routeId == widget.routeId)
               .toList();
-          final started = current.any((r) => r.kind == WorkPhotoKind.start);
-          final ended = current.any((r) => r.kind == WorkPhotoKind.end);
-          final next = started ? WorkPhotoKind.end : WorkPhotoKind.start;
+          final next = widget.period == TransportPeriod.morning
+              ? WorkPhotoKind.start
+              : WorkPhotoKind.end;
+          final completed = current.any((r) => r.kind == next);
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -389,7 +391,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   '${r.kind.label} 사진 등록 · ${r.koreaTime.startsWith(r.date) ? r.koreaTime.substring(11) : r.koreaTime}',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
-              if (staff && canRegister && !ended)
+              if (verified && !completed) Text('${next.label} 사진 · 미등록'),
+              if (staff && canRegister && !completed)
                 FilledButton.icon(
                   key: Key('register-work-${next.name}'),
                   onPressed: verified && busy == null
@@ -404,7 +407,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       : const Icon(Icons.camera_alt_outlined),
                   label: Text(uploading ? '사진 등록 중…' : '${next.label} 사진 등록'),
                 ),
-              if (ended) const Text('업무 시작·종료 사진을 모두 등록했습니다.'),
+              if (completed) Text('${next.label} 사진을 등록했습니다.'),
               if (entries.isNotEmpty)
                 ExpansionTile(
                   key: const Key('work-photo-history'),

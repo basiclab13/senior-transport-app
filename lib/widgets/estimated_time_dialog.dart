@@ -8,11 +8,13 @@ class EstimatedTimeDialog extends StatefulWidget {
     required this.title,
     required this.labels,
     required this.minutes,
-    this.guidance = 'HH:mm 형식으로 입력하세요. 모두 비우면 미입력으로 변경됩니다.',
+    this.defaultMinute,
+    this.guidance = '시계 버튼으로 시간을 고르거나 직접 입력하세요.',
   });
   final String title;
   final List<String> labels;
   final List<int?> minutes;
+  final int? defaultMinute;
   final String guidance;
 
   @override
@@ -54,6 +56,12 @@ class _EstimatedTimeDialogState extends State<EstimatedTimeDialog> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(widget.guidance),
+              if (widget.defaultMinute != null && _fields.length == 1)
+                TextButton(
+                  onPressed: () =>
+                      _fields.first.text = minuteLabel(widget.defaultMinute),
+                  child: Text('기본 시간 ${minuteLabel(widget.defaultMinute)} 사용'),
+                ),
               for (var i = 0; i < _fields.length; i++)
                 Padding(
                   padding: const EdgeInsets.only(top: 16),
@@ -63,6 +71,30 @@ class _EstimatedTimeDialogState extends State<EstimatedTimeDialog> {
                     decoration: InputDecoration(
                       labelText: widget.labels[i],
                       hintText: '08:10',
+                      suffixIcon: IconButton(
+                        tooltip: '시간 선택',
+                        icon: const Icon(Icons.schedule),
+                        onPressed: () async {
+                          final minute = _parse(_fields[i].text) ?? 540;
+                          final value = await showTimePicker(
+                            context: context,
+                            cancelText: '취소',
+                            confirmText: '선택',
+                            helpText: '약속 시간 선택',
+                            hourLabelText: '시',
+                            minuteLabelText: '분',
+                            initialTime: TimeOfDay(
+                              hour: minute ~/ 60,
+                              minute: minute % 60,
+                            ),
+                          );
+                          if (value != null && mounted) {
+                            _fields[i].text = minuteLabel(
+                              value.hour * 60 + value.minute,
+                            );
+                          }
+                        },
+                      ),
                     ),
                     keyboardType: TextInputType.datetime,
                     validator: (text) {

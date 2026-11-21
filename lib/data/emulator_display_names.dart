@@ -70,6 +70,8 @@ ScheduleCatalog emulatorDisplayCatalog(
         name(p.id, 'p', demoPassengerNames, p.name),
         p.address,
         p.note,
+        defaultMorningMinute: p.defaultMorningMinute,
+        detailsVersion: p.detailsVersion,
       ),
     ),
     vehicles: catalog.vehicles,

@@ -40,6 +40,12 @@ async function confirm(db, uid, data) {
       const query = await tx.get(catalogRef.collection(collection));
       catalog[collection] = query.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
     }
+    const details = await tx.get(catalogRef.collection('passengerSettings'));
+    for (const doc of details.docs) {
+      require('./passenger-details').versionOf(doc.data());
+      const passenger=catalog.passengers.find(p=>p.id===doc.id);
+      if(passenger)Object.assign(passenger,{note:doc.data().note,defaultMorningMinute:doc.data().defaultMorningMinute,detailsVersion:doc.data().version});
+    }
     validateSchedule(data, catalog);
     const assigned = [...new Set(data.routes.map((r) => r.staffId))];
     const availability = assigned.length ? await tx.getAll(...assigned.map((id) => db.doc(`staffAvailability/${data.date}/staff/${id}`))) : [];

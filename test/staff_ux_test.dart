@@ -46,6 +46,9 @@ void main() {
     source.setVisitMinute('morning-a', 'p3', 510);
     source.confirm();
     repo.snapshots['2026-11-12_morning'] = source.confirmed!;
+    source.selectPeriod(TransportPeriod.afternoon);
+    source.confirm();
+    repo.snapshots['2026-11-12_afternoon'] = source.confirmed!;
     source.dispose();
     c = ScheduleController.remote(
       user: staffUser,
@@ -152,39 +155,38 @@ void main() {
     );
   }
   testWidgets(
-    'inline start → end → completed; photos expand without page navigation',
+    'morning start completes morning task; afternoon end is a separate task',
     (tester) async {
       await open(tester, interactive: true);
       await save(tester, 'start');
       expect(find.byKey(const Key('register-work-start')), findsNothing);
-      expect(find.byKey(const Key('register-work-end')), findsOneWidget);
+      expect(find.byKey(const Key('register-work-end')), findsNothing);
       expect(find.text('업무 시작 사진 등록 · 09:15:00'), findsOneWidget);
+      c.selectPeriod(TransportPeriod.afternoon);
+      await tester.pumpAndSettle();
       await save(tester, 'end');
       expect(repo.attendance.records.length, 2);
       expect(find.byType(FilledButton), findsNothing);
-      expect(find.text('업무 시작·종료 사진을 모두 등록했습니다.'), findsOneWidget);
+      expect(find.text('업무 종료 사진을 등록했습니다.'), findsOneWidget);
       await tester.tap(find.text('등록한 사진 보기'));
       await tester.pumpAndSettle();
-      expect(find.byType(Image), findsNWidgets(2));
+      expect(find.byType(Image), findsOneWidget);
       expect(find.byType(BackButton), findsNothing);
     },
   );
-  testWidgets(
-    'notes are collapsed while order, expected time and address stay visible',
-    (tester) async {
-      await open(tester);
-      final visit = find.byKey(const ValueKey('timeline-p1'));
-      await tester.ensureVisible(visit);
-      await tester.pumpAndSettle();
-      expect(find.text('약속 시간 08:10'), findsOneWidget);
-      expect(find.text('가상마을 햇살길 1'), findsOneWidget);
-      expect(find.text('승하차 시 천천히 안내'), findsNothing);
-      await tester.tap(find.text('어르신 A'));
-      await tester.pumpAndSettle();
-      expect(find.text('승하차 시 천천히 안내'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
+  testWidgets('notes are immediately visible below name and address', (
+    tester,
+  ) async {
+    await open(tester);
+    final visit = find.byKey(const ValueKey('timeline-p1'));
+    await tester.ensureVisible(visit);
+    await tester.pumpAndSettle();
+    expect(find.text('약속 시간 08:10'), findsOneWidget);
+    expect(find.text('가상마을 햇살길 1'), findsOneWidget);
+    expect(find.text('승하차 시 천천히 안내'), findsOneWidget);
+    expect(find.text('특이사항 보기'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
     'absence hides operable course and upload without inventing handoff completion',
     (tester) async {
@@ -217,14 +219,14 @@ void main() {
     (tester) async {
       await photo(WorkPhotoKind.start);
       await open(tester);
-      expect(find.byKey(const Key('register-work-end')), findsOneWidget);
+      expect(find.byKey(const Key('register-work-end')), findsNothing);
       await tester.tap(find.text('오후'));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('register-work-end')), findsNothing);
+      expect(find.byKey(const Key('register-work-end')), findsOneWidget);
       expect(find.text('업무 시작 사진 등록 · 09:15:00'), findsNothing);
       await tester.tap(find.text('오전'));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('register-work-end')), findsOneWidget);
+      expect(find.byKey(const Key('register-work-end')), findsNothing);
       expect(dateKey(c.selectedDate), '2026-11-12');
     },
   );

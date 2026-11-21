@@ -63,6 +63,7 @@ async function registerWorkPhoto(db,bucket,uid,input,{clock=Date.now,afterUpload
   const keys=['date','period','routeId','kind','requestId','photoBase64','expectedVersion','expectedAvailabilityVersion'];
   if(Object.keys(input).some(k=>!keys.includes(k))||!id(input.routeId)||!id(input.requestId)||!['start','end'].includes(input.kind)||
     !Number.isSafeInteger(input.expectedVersion)||input.expectedVersion<1||!Number.isSafeInteger(input.expectedAvailabilityVersion)||input.expectedAvailabilityVersion<0)fail('invalid-argument','사진 등록 요청을 확인해 주세요.');
+  if(input.kind!==(input.period==='morning'?'start':'end'))fail('invalid-argument','오전에는 업무 시작, 오후에는 업무 종료 사진을 등록해 주세요.');
   if(input.date!==new Date(clock()+9*3600000).toISOString().slice(0,10))fail('failed-precondition','사진은 한국 시간 기준 오늘의 확정 일정에만 등록할 수 있습니다.');
   const initialProfile=(await db.doc(`users/${uid}`).get()).data();active(initialProfile);
   if(initialProfile.role!=='staff'||!id(initialProfile.staffId))fail('permission-denied','직원 본인의 사진만 등록할 수 있습니다.');
@@ -75,13 +76,12 @@ async function registerWorkPhoto(db,bucket,uid,input,{clock=Date.now,afterUpload
     if(config.requireAppCheck===true&&!app)fail('unauthenticated','앱 인증을 확인해 주세요.');
     if(config.requireAppCheck!==undefined&&typeof config.requireAppCheck!=='boolean')fail('failed-precondition','사진 서버 설정을 확인해 주세요.');
     const ref=recordRef(db,context.staffId,input),slot=db.doc(`_workPhotoSlots/${digest(ref.path)}`);
-    const [op,existing,start,locked]=await tx.getAll(opRef,ref,recordRef(db,context.staffId,input,'start'),slot);
+    const [op,existing,locked]=await tx.getAll(opRef,ref,slot);
     if(op.exists&&(op.data().fingerprint!==fingerprint||op.data().uid!==uid))fail('already-exists','같은 요청 ID를 다른 사진에 사용할 수 없습니다.');
     if(existing.exists){
       if(existing.data().operationId===operationId&&existing.data().uid===uid)return {completed:publicRecord(existing)};
       fail('already-exists','이미 등록된 사진이 있습니다. 기록을 새로 확인해 주세요.');
     }
-    if(input.kind==='end'&&(!start.exists||start.data().schemaVersion!==2||start.data().uid!==uid||start.data().expiresAt.toMillis()<=clock()))fail('failed-precondition','업무 시작 사진부터 등록해 주세요.');
     if(op.exists&&op.data().state!=='pending')fail('failed-precondition','종료된 요청입니다. 기록을 확인한 뒤 새 요청을 시작해 주세요.');
     if(locked.exists&&locked.data().leaseUntilMs>clock())fail('aborted','사진 등록을 처리 중입니다. 잠시 후 기록을 확인해 주세요.');
     const path=`${PREFIX}${context.staffId}/${input.date}/${input.period}/${input.routeId}/${input.kind}/${operationId}.jpg`;
@@ -101,12 +101,11 @@ async function registerWorkPhoto(db,bucket,uid,input,{clock=Date.now,afterUpload
     await afterUpload();
     await db.runTransaction(async tx=>{
       const context=await registrationContext(tx,db,uid,input,app);
-      const [op,existing,start,locked,control]=await tx.getAll(opRef,ticket.ref,recordRef(db,context.staffId,input,'start'),ticket.slot,db.doc('_workPhotoControl/config'));
+      const [op,existing,locked,control]=await tx.getAll(opRef,ticket.ref,ticket.slot,db.doc('_workPhotoControl/config'));
       if(control.data()?.requireAppCheck===true&&!app)fail('unauthenticated','앱 인증을 확인해 주세요.');
       if(context.staffId!==ticket.staffId||context.catalogVersion!==ticket.catalogVersion||context.scheduleVersion!==ticket.scheduleVersion||context.availabilityVersion!==ticket.availabilityVersion||
         op.data()?.state!=='pending'||op.data()?.lease!==lease||locked.data()?.lease!==lease||op.data().leaseUntilMs<=clock())fail('aborted','사진 처리 중 담당 일정이나 요청 상태가 변경되었습니다. 기록을 확인해 주세요.');
       if(existing.exists)fail('already-exists','이미 등록된 사진입니다.');
-      if(input.kind==='end'&&(!start.exists||start.data().uid!==uid||start.data().expiresAt.toMillis()<=clock()))fail('failed-precondition','업무 시작 기록을 확인해 주세요.');
       tx.create(ticket.ref,{schemaVersion:2,...context,uid,date:input.date,period:input.period,routeId:input.routeId,kind:input.kind,operationId,
         registeredAt:FieldValue.serverTimestamp(),expiresAt:Timestamp.fromMillis(clock()+30*DAY),
         photo:{bucket:bucket.name,path:ticket.path,generation:String(meta.generation),sha256,size:bytes.length,contentType:'image/jpeg'}});

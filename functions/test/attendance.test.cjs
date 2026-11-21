@@ -35,6 +35,7 @@ test('photo attendance uses confirmed assignments and immutable server timestamp
       'photo-other':{role:'staff',staffId:'s2',active:true}, 'photo-inactive':{role:'staff',staffId:'s1',active:false},
     })) await db.doc(`users/${uid}`).set(profile);
     await confirm(db,'photo-admin',operationRequest(catalog,date,'morning',version,randomUUID()));
+    await confirm(db,'photo-admin',operationRequest(catalog,date,'afternoon',version,randomUUID()));
     await t.test('missing records are an empty authorized query; end requires start', async () => {
       const records = query(collection(staff,'attendance/s1/records'),where('date','==',date),where('period','==','morning'));
       assert.equal((await assertSucceeds(getDocs(records))).empty,true);
@@ -64,11 +65,22 @@ test('photo attendance uses confirmed assignments and immutable server timestamp
       assert.ok(saved.registeredAt.toMillis() >= before && saved.registeredAt.toMillis() <= Date.now()+10000);
       assert.equal(saved.staffId,'s1'); assert.equal(saved.date,date); assert.equal(saved.routeId,routeId);
       assert.equal(saved.photo.toUint8Array().length,4);
-      await assertSucceeds(setDoc(doc(staff,path('end')),{...photo(),kind:'end'}));
-      assert.ok((await getDoc(doc(staff,path('end')))).data().registeredAt.toMillis() >= saved.registeredAt.toMillis());
+      const afternoonRoute=catalog.baseRoutes.find(r=>r.staffId==='s1'&&r.period==='afternoon').id;
+      const afternoonPath=`attendance/s1/records/${date}_afternoon_${afternoonRoute}_end`;
+      await assertSucceeds(setDoc(doc(staff,afternoonPath),{...photo(),period:'afternoon',routeId:afternoonRoute,kind:'end'}));
+      assert.ok((await getDoc(doc(staff,afternoonPath))).data().registeredAt.toMillis() >= saved.registeredAt.toMillis());
+    });
+    await t.test('afternoon end succeeds without morning start, and afternoon start is denied',async()=>{
+      const day='2026-11-20';
+      await confirm(db,'photo-admin',operationRequest(catalog,day,'afternoon',version,randomUUID()));
+      const route=catalog.baseRoutes.find(r=>r.staffId==='s1'&&r.period==='afternoon').id;
+      const value={...photo(),date:day,period:'afternoon',routeId:route,kind:'end'};
+      await assertSucceeds(setDoc(doc(staff,`attendance/s1/records/${day}_afternoon_${route}_end`),value));
+      await assertFails(setDoc(doc(staff,`attendance/s1/records/${day}_afternoon_${route}_start`),{...value,kind:'start'}));
+      assert.equal((await db.doc(path('start',day)).get()).exists,false);
     });
     await t.test('administrator sees selected staff records; another staff member and anonymous users cannot', async () => {
-      assert.equal((await assertSucceeds(getDocs(collection(admin,'attendance/s1/records')))).size,2);
+      assert.equal((await assertSucceeds(getDocs(collection(admin,'attendance/s1/records')))).size,3);
       await assertSucceeds(getDoc(doc(staff,path())));
       for (const client of [other,env.unauthenticatedContext().firestore()]) {
         await assertFails(getDoc(doc(client,path())));
